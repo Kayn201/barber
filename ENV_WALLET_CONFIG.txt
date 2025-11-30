@@ -1,0 +1,18 @@
+===========================================
+CONFIGURAÇÃO DO .ENV PARA APPLE WALLET
+===========================================
+
+Adicione estas linhas ao seu arquivo .env:
+
+# Apple Wallet Configuration
+WALLET_CERTIFICATES_PATH=wallet/certificates
+WALLET_P12_PASSWORD=Eamemgk141220-
+NEXT_PUBLIC_BASE_URL=https://popupsystem.com.br
+
+===========================================
+OBSERVAÇÕES:
+- WALLET_CERTIFICATES_PATH é relativo à raiz do projeto
+- A senha do P12 já está configurada
+- A URL pública já está configurada para popupsystem.com.br
+===========================================
+

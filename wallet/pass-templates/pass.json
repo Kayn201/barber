@@ -1,0 +1,77 @@
+{
+  "formatVersion": 1,
+  "passTypeIdentifier": "pass.teste.popupsystem.com.br",
+  "teamIdentifier": "7ZB2L2RLB2",
+  "organizationName": "Barbearia",
+  "description": "Agendamento de Serviço",
+  "logoText": "Agendamento",
+  "foregroundColor": "rgb(255, 255, 255)",
+  "backgroundColor": "rgb(30, 31, 35)",
+  "labelColor": "rgb(238, 133, 48)",
+  "eventTicket": {
+    "headerFields": [
+      {
+        "key": "service",
+        "label": "SERVIÇO",
+        "value": ""
+      }
+    ],
+    "primaryFields": [
+      {
+        "key": "date",
+        "label": "DATA",
+        "value": ""
+      }
+    ],
+    "secondaryFields": [
+      {
+        "key": "professional",
+        "label": "PROFISSIONAL",
+        "value": ""
+      },
+      {
+        "key": "time",
+        "label": "HORÁRIO",
+        "value": ""
+      }
+    ],
+    "auxiliaryFields": [
+      {
+        "key": "status",
+        "label": "STATUS",
+        "value": ""
+      }
+    ],
+    "backFields": [
+      {
+        "key": "barbershop",
+        "label": "BARBEARIA",
+        "value": ""
+      },
+      {
+        "key": "address",
+        "label": "ENDEREÇO",
+        "value": ""
+      },
+      {
+        "key": "phone",
+        "label": "TELEFONE",
+        "value": ""
+      },
+      {
+        "key": "notes",
+        "label": "OBSERVAÇÕES",
+        "value": "Apresente este passe na barbearia no horário agendado."
+      }
+    ]
+  },
+  "serialNumber": "",
+  "barcode": {
+    "message": "",
+    "format": "PKBarcodeFormatQR",
+    "messageEncoding": "iso-8859-1"
+  },
+  "webServiceURL": "",
+  "authenticationToken": ""
+}
+
