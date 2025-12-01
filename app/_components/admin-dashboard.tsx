@@ -4,12 +4,13 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
-import { Plus, Users, Calendar, CreditCard, Settings, ChevronLeft, ChevronRight, Building2 } from "lucide-react"
+import { Plus, Users, Calendar, CreditCard, Settings, ChevronLeft, ChevronRight, Building2, BarChart3 } from "lucide-react"
 import AdminServicesTab from "./admin-services-tab"
 import AdminProfessionalsTab from "./admin-professionals-tab"
 import AdminSubscriptionsTab from "./admin-subscriptions-tab"
 import AdminBookingsTab from "./admin-bookings-tab"
 import AdminBusinessProfileTab from "./admin-business-profile-tab"
+import AdminOverviewTab from "./admin-overview-tab"
 
 interface AdminDashboardProps {
   services: any[]
@@ -17,6 +18,8 @@ interface AdminDashboardProps {
   subscriptions: any[]
   bookings: any[]
   barbershop: any
+  monthlyStats: any[]
+  yearlyStats: any[]
 }
 
 const AdminDashboard = ({
@@ -25,10 +28,13 @@ const AdminDashboard = ({
   subscriptions,
   bookings,
   barbershop,
+  monthlyStats,
+  yearlyStats,
 }: AdminDashboardProps) => {
   const [currentIndex, setCurrentIndex] = useState(0)
   
   const tabs = [
+    { value: "overview", label: "Visão geral", icon: BarChart3 },
     { value: "business", label: "Perfil Empresarial", icon: Building2 },
     { value: "services", label: "Serviços", icon: Settings },
     { value: "professionals", label: "Profissionais", icon: Users },
@@ -57,7 +63,14 @@ const AdminDashboard = ({
           <p className="text-gray-400">Gerencie serviços, profissionais e agendamentos</p>
         </div>
 
-        <Tabs defaultValue="business" className="w-full">
+        <Tabs defaultValue="overview" className="w-full" onValueChange={(value) => {
+          // Quando muda para uma aba, disparar evento para forçar atualização
+          if (value === "overview") {
+            window.dispatchEvent(new CustomEvent("overview-tab-activated"))
+          } else if (value === "bookings") {
+            window.dispatchEvent(new CustomEvent("bookings-tab-activated"))
+          }
+        }}>
           <TabsList className="relative flex items-center gap-2 overflow-hidden !p-0 md:overflow-x-auto md:gap-3">
             <Button
               variant="outline"
@@ -96,6 +109,10 @@ const AdminDashboard = ({
             </Button>
           </TabsList>
 
+          <TabsContent value="overview" className="mt-6">
+            <AdminOverviewTab monthlyStats={monthlyStats} yearlyStats={yearlyStats} allBookings={bookings} />
+          </TabsContent>
+
           <TabsContent value="business" className="mt-6">
             <AdminBusinessProfileTab barbershop={barbershop} />
           </TabsContent>
@@ -105,7 +122,7 @@ const AdminDashboard = ({
           </TabsContent>
 
           <TabsContent value="professionals" className="mt-6">
-            <AdminProfessionalsTab professionals={professionals} services={services} />
+            <AdminProfessionalsTab professionals={professionals} services={services} barbershop={barbershop} />
           </TabsContent>
 
           <TabsContent value="subscriptions" className="mt-6">

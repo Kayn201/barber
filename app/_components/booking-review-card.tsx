@@ -7,7 +7,6 @@ import { Button } from "./ui/button"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { BarbershopService, Professional } from "@prisma/client"
-import { MessageCircle } from "lucide-react"
 import AuthDialog from "./auth-dialog"
 
 interface BookingReviewCardProps {
@@ -26,17 +25,6 @@ const BookingReviewCard = ({
   const { data: session } = useSession()
   const [authDialogOpen, setAuthDialogOpen] = useState(false)
   const isSubscription = Boolean(service.isSubscription && service.subscriptionInterval)
-  const handleWhatsAppClick = () => {
-    // Buscar telefone da barbearia (você pode ajustar isso)
-    const phoneNumber = "5511999999999" // Substituir pelo telefone real
-    const message = encodeURIComponent(
-      `Olá! Tenho interesse em antecipar meu horário de agendamento.\n\n` +
-        `Serviço: ${service.name}\n` +
-        `Data: ${format(selectedDate, "d 'de' MMMM 'às' HH:mm", { locale: ptBR })}\n` +
-        `Profissional: ${professional.name}`
-    )
-    window.open(`https://wa.me/${phoneNumber}?text=${message}`, "_blank")
-  }
 
   const handleAgendarClick = () => {
     // Se for assinatura e não estiver autenticado, mostrar dialog de autenticação
@@ -84,16 +72,6 @@ const BookingReviewCard = ({
               <span className="text-sm font-semibold">{professional.name}</span>
             </div>
           </div>
-
-          {/* BOTÃO ANTECIPAR HORÁRIO */}
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={handleWhatsAppClick}
-          >
-            <MessageCircle className="mr-2 h-4 w-4" />
-            Tenho interesse em antecipar horário
-          </Button>
         </CardContent>
       </Card>
 

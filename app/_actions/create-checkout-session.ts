@@ -68,12 +68,21 @@ export const createCheckoutSession = async (
     //   paymentMethodTypes.push("pix")
     // }
 
+    // Determinar URL base - usar localhost em desenvolvimento/teste
+    const isDevelopment = process.env.NODE_ENV === "development" || 
+                         process.env.NEXT_PUBLIC_APP_URL?.includes("localhost") ||
+                         process.env.USE_LOCALHOST_REDIRECT === "true"
+    
+    const baseUrl = isDevelopment 
+      ? "http://localhost:3000"
+      : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
+
     // Configurar base do checkout com tradução PT-BR
     const baseConfig: any = {
       payment_method_types: paymentMethodTypes,
       locale: "pt-BR",
-      success_url: `${process.env.NEXT_PUBLIC_APP_URL}/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_APP_URL}/book?professional=${params.professionalId}`,
+      success_url: `${baseUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/book?professional=${params.professionalId}`,
       metadata: {
         professionalId: params.professionalId,
         serviceId: params.serviceId,

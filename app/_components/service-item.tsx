@@ -28,10 +28,12 @@ import { getAvailableTimes, TIME_LIST } from "../_lib/get-available-times"
 interface ServiceItemProps {
   service: BarbershopService
   barbershop: Pick<Barbershop, "name">
+  businessHours?: any[]
+  professionals?: any[]
 }
 
 
-const ServiceItem = ({ service, barbershop }: ServiceItemProps) => {
+const ServiceItem = ({ service, barbershop, businessHours = [], professionals = [] }: ServiceItemProps) => {
   const { data } = useSession()
   const router = useRouter()
   const [signInDialogIsOpen, setSignInDialogIsOpen] = useState(false)
@@ -41,24 +43,14 @@ const ServiceItem = ({ service, barbershop }: ServiceItemProps) => {
   )
   const [dayBookings, setDayBookings] = useState<Booking[]>([])
   const [bookingSheetIsOpen, setBookingSheetIsOpen] = useState(false)
-  const [professionalIds, setProfessionalIds] = useState<string[]>([])
   const [isTimesLoading, setIsTimesLoading] = useState(false)
 
-  // Buscar profissionais que fazem este serviço
-  useEffect(() => {
-    const fetchProfessionals = async () => {
-      try {
-        const response = await fetch(`/api/services/${service.id}/professionals`)
-        if (response.ok) {
-          const data = await response.json()
-          setProfessionalIds(data.map((p: any) => p.id))
-        }
-      } catch (error) {
-        console.error("Erro ao buscar profissionais:", error)
-      }
-    }
-    fetchProfessionals()
-  }, [service.id])
+  // Usar profissionais e horários passados como props
+  const professionalIds = useMemo(() => professionals.map((p) => p.id), [professionals])
+  const professionalSchedules = useMemo(() => professionals.map((p) => ({
+    id: p.id,
+    weeklySchedule: p.weeklySchedule || [],
+  })), [professionals])
 
   useEffect(() => {
     const fetch = async () => {
@@ -92,6 +84,11 @@ const ServiceItem = ({ service, barbershop }: ServiceItemProps) => {
   const availableTimeSet = useMemo(() => {
     if (!selectedDay || professionalIds.length === 0) return new Set<string>()
 
+    // Combinar horários de todos os profissionais (usar o primeiro disponível)
+    const combinedSchedule = professionalSchedules.length > 0
+      ? professionalSchedules[0]?.weeklySchedule || []
+      : []
+
     const times = getAvailableTimes({
       bookings: dayBookings.map((b) => ({
         ...b,
@@ -100,19 +97,50 @@ const ServiceItem = ({ service, barbershop }: ServiceItemProps) => {
       selectedDay,
       serviceDuration: service.duration,
       professionalIds,
+      professionalSchedule: combinedSchedule,
+      businessHours: businessHours,
     })
 
     return new Set(times)
-  }, [dayBookings, selectedDay, service.duration, professionalIds])
+  }, [dayBookings, selectedDay, service.duration, professionalIds, professionalSchedules, businessHours])
 
   const timeSlots = useMemo(() => {
     if (!selectedDay) return []
 
-    return TIME_LIST.map((time) => ({
+    // Usar horários do profissional ou TIME_LIST padrão
+    const timeList = professionalSchedules.length > 0 && professionalSchedules[0]?.weeklySchedule
+      ? (() => {
+          const dayOfWeek = selectedDay.getDay()
+          const daySchedule = professionalSchedules[0].weeklySchedule.find(
+            (s: any) => s.dayOfWeek === dayOfWeek && s.isAvailable
+          )
+          if (daySchedule) {
+            // Gerar lista de horários baseado no schedule
+            const times: string[] = []
+            const [startHour, startMin] = daySchedule.startTime.split(":").map(Number)
+            const [endHour, endMin] = daySchedule.endTime.split(":").map(Number)
+            const start = new Date()
+            start.setHours(startHour, startMin, 0, 0)
+            const end = new Date()
+            end.setHours(endHour, endMin, 0, 0)
+            const current = new Date(start)
+            while (current < end) {
+              const hours = String(current.getHours()).padStart(2, "0")
+              const minutes = String(current.getMinutes()).padStart(2, "0")
+              times.push(`${hours}:${minutes}`)
+              current.setMinutes(current.getMinutes() + 30)
+            }
+            return times
+          }
+          return TIME_LIST
+        })()
+      : TIME_LIST
+
+    return timeList.map((time) => ({
       time,
       available: availableTimeSet.has(time),
     }))
-  }, [availableTimeSet, selectedDay])
+  }, [availableTimeSet, selectedDay, professionalSchedules])
 
   const handleBookingClick = () => {
     if (data?.user) {

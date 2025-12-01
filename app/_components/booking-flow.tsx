@@ -31,11 +31,12 @@ interface BookingFlowProps {
     ratings: { score: number }[]
   }
   averageRating: number
+  businessHours?: any[]
 }
 
 type BookingStep = "service" | "date" | "time" | "review"
 
-const BookingFlow = ({ professional, averageRating }: BookingFlowProps) => {
+const BookingFlow = ({ professional, averageRating, businessHours = [] }: BookingFlowProps) => {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [step, setStep] = useState<BookingStep>("service")
@@ -98,6 +99,8 @@ const BookingFlow = ({ professional, averageRating }: BookingFlowProps) => {
     professionalId: professional.id,
     serviceDuration: selectedService?.duration || 0,
     professionalIds: [professional.id],
+    professionalSchedule: professional.weeklySchedule,
+    businessHours: businessHours,
   })
 
   const availableTimeSet = useMemo(() => new Set(availableTimes), [availableTimes])
@@ -105,11 +108,37 @@ const BookingFlow = ({ professional, averageRating }: BookingFlowProps) => {
   const timeSlots = useMemo(() => {
     if (!calendarSelectedDate) return []
 
-    return TIME_LIST.map((time) => ({
+    // Usar horários do profissional ou TIME_LIST padrão
+    const dayOfWeek = calendarSelectedDate.getDay()
+    const daySchedule = professional.weeklySchedule.find(
+      (s) => s.dayOfWeek === dayOfWeek && s.isAvailable
+    )
+    
+    const timeList = daySchedule
+      ? (() => {
+          const times: string[] = []
+          const [startHour, startMin] = daySchedule.startTime.split(":").map(Number)
+          const [endHour, endMin] = daySchedule.endTime.split(":").map(Number)
+          const start = new Date()
+          start.setHours(startHour, startMin, 0, 0)
+          const end = new Date()
+          end.setHours(endHour, endMin, 0, 0)
+          const current = new Date(start)
+          while (current < end) {
+            const hours = String(current.getHours()).padStart(2, "0")
+            const minutes = String(current.getMinutes()).padStart(2, "0")
+            times.push(`${hours}:${minutes}`)
+            current.setMinutes(current.getMinutes() + 30)
+          }
+          return times
+        })()
+      : TIME_LIST
+
+    return timeList.map((time) => ({
       time,
       available: availableTimeSet.has(time),
     }))
-  }, [availableTimeSet, calendarSelectedDate])
+  }, [availableTimeSet, calendarSelectedDate, professional.weeklySchedule])
 
   const handleServiceSelect = (service: BarbershopService) => {
     setSelectedService(service)

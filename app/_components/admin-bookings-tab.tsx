@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale"
 import { refundBooking } from "../_actions/refund-booking"
 import { rescheduleBooking } from "../_actions/reschedule-booking"
 import { toast } from "sonner"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   Dialog,
   DialogContent,
@@ -114,13 +114,19 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
     generateAvailableDates()
   }, [currentRescheduleBooking?.professionalId, professionalScheduleMap])
 
-  // Polling inteligente: só busca todos os bookings se detectar novos
-  useEffect(() => {
-    const checkAndUpdate = async () => {
-      // Só verifica se a página estiver visível
-      if (document.hidden) return
+  // Função para atualizar bookings (memoizada)
+  const updateBookings = useCallback(async (force = false) => {
+    if (document.hidden && !force) return
 
-      try {
+    try {
+      if (force) {
+        // Se forçado, buscar diretamente sem verificar
+        const updatedBookings = await getAllBookings()
+        setBookings(updatedBookings)
+        if (updatedBookings[0]?.id) {
+          setLastBookingId(updatedBookings[0].id)
+        }
+      } else {
         // Verifica se há novos bookings (query leve - só verifica timestamps)
         const checkResult = await checkNewBookings(lastBookingId)
         
@@ -133,28 +139,51 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
             setLastBookingId(updatedBookings[0].id)
           }
         }
-      } catch (error) {
-        console.error("Erro ao verificar novos bookings:", error)
       }
+    } catch (error) {
+      console.error("Erro ao verificar novos bookings:", error)
     }
+  }, [lastBookingId])
+
+  // Atualizar apenas quando necessário (sem polling constante)
+  useEffect(() => {
+    // Verificar imediatamente quando o componente monta
+    updateBookings(true)
 
     // Verificar quando a página volta a ficar visível
     const handleVisibilityChange = () => {
       if (!document.hidden) {
-        checkAndUpdate()
+        updateBookings(true)
       }
     }
 
-    document.addEventListener("visibilitychange", handleVisibilityChange)
+    // Verificar quando a aba bookings é ativada
+    const handleTabActivated = () => {
+      updateBookings(true)
+    }
 
-    // Polling a cada 10 segundos - só verifica se há novos (query leve)
-    const interval = setInterval(checkAndUpdate, 10000)
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    window.addEventListener("bookings-tab-activated", handleTabActivated)
 
     return () => {
-      clearInterval(interval)
       document.removeEventListener("visibilitychange", handleVisibilityChange)
+      window.removeEventListener("bookings-tab-activated", handleTabActivated)
     }
-  }, [lastBookingId])
+  }, [updateBookings])
+
+  // Observar quando um booking é criado, reembolsado ou reagendado
+  useEffect(() => {
+    const handleBookingUpdated = () => {
+      // Atualizar lista de bookings quando um booking é criado, reembolsado ou reagendado
+      updateBookings(true)
+    }
+
+    window.addEventListener("booking-updated", handleBookingUpdated)
+
+    return () => {
+      window.removeEventListener("booking-updated", handleBookingUpdated)
+    }
+  }, [updateBookings])
 
   const getStatusBadge = (status: string, isRefunded: boolean, hasOriginalBookingId?: boolean) => {
     // Se foi reembolsado, mostrar badge de Reembolsado
@@ -194,6 +223,8 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
       })
       if (result.success) {
         toast.success("Reembolso processado com sucesso!")
+        // Disparar evento para atualizar stats na aba "Visão geral"
+        window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "refunded" } }))
         // Atualizar lista de bookings
         const updatedBookings = await getAllBookings()
         setBookings(updatedBookings)
@@ -252,6 +283,8 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
       })
       if (result.success) {
         toast.success("Agendamento reagendado com sucesso!")
+        // Disparar evento para atualizar stats na aba "Visão geral"
+        window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "rescheduled" } }))
         setRescheduleDialogOpen(null)
         setCurrentRescheduleBooking(null)
         setSelectedRescheduleDay(undefined)
@@ -326,7 +359,7 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
                 {getStatusBadge(booking.status, booking.isRefunded, hasOriginalBookingId)}
               </div>
               <p className="text-sm text-gray-400">
-                {booking.client?.name || "Cliente"} - {booking.client?.email || "N/A"}
+                {booking.client?.name || "Cliente"}
               </p>
               <p className="text-sm text-gray-400">
                 Profissional: {booking.professional.name}
@@ -555,7 +588,7 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
               className="flex-shrink-0 whitespace-nowrap data-[state=active]:bg-[#EE8530] data-[state=active]:text-black data-[state=active]:shadow-sm"
             >
               <RotateCcw className="mr-2 h-4 w-4" />
-              Cancelado ({cancelledBookings.length})
+              Reagendado ({cancelledBookings.length})
             </TabsTrigger>
             <TabsTrigger 
               value="completed" 
@@ -599,7 +632,7 @@ const AdminBookingsTab = ({ bookings: initialBookings }: AdminBookingsTabProps) 
           {cancelledBookings.length === 0 ? (
             <Card>
               <CardContent className="py-8 text-center text-gray-400">
-                Nenhum agendamento cancelado encontrado
+                Nenhum agendamento reagendado encontrado
               </CardContent>
             </Card>
           ) : (

@@ -9,6 +9,7 @@ import ProfessionalItem from "./_components/professional-item"
 import ActiveBookingsSection from "./_components/active-bookings-section"
 import RatingCheck from "./_components/rating-check"
 import GenerateWalletButton from "./_components/generate-wallet-button"
+import BookingPolling from "./_components/booking-polling"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { authOptions } from "./_lib/auth"
@@ -116,7 +117,7 @@ const Home = async ({ searchParams }: HomeProps) => {
     if (clientByEmail) {
       clientId = clientByEmail.id
       // Redirecionar para route handler que salva o cookie
-      redirect(`/api/save-client-cookie?clientId=${clientByEmail.id}&email=${encodeURIComponent(clientEmailFromCookie)}`)
+      redirect(`/api/save-client-cookie?clientId=${clientByEmail.id}`)
     }
   }
   
@@ -129,7 +130,7 @@ const Home = async ({ searchParams }: HomeProps) => {
     })
     
     if (clientForEmail?.email) {
-      redirect(`/api/save-client-cookie?clientId=${clientIdFromUrl}&email=${encodeURIComponent(clientForEmail.email)}`)
+      redirect(`/api/save-client-cookie?clientId=${clientIdFromUrl}`)
     } else {
       redirect(`/api/save-client-cookie?clientId=${clientIdFromUrl}`)
     }
@@ -188,6 +189,7 @@ const Home = async ({ searchParams }: HomeProps) => {
   // Se ainda não encontrou agendamentos e tem email no cookie, tentar buscar pelo email
   // (pode ser que o webhook já tenha criado o cliente mas ainda não temos o clientId salvo)
   if (!upcomingBookings.length && !clientId && clientEmailFromCookie) {
+    // Primeiro tentar buscar cliente pelo email
     const clientByEmail = await db.client.findFirst({
       where: { email: clientEmailFromCookie },
       include: {
@@ -207,11 +209,50 @@ const Home = async ({ searchParams }: HomeProps) => {
       },
     })
 
-    if (clientByEmail && clientByEmail.bookings.length > 0) {
-      upcomingBookings = clientByEmail.bookings as BookingWithRelations[]
-      client = { name: clientByEmail.name }
-      // Redirecionar para salvar o clientId no cookie
-      redirect(`/api/save-client-cookie?clientId=${clientByEmail.id}&email=${encodeURIComponent(clientEmailFromCookie)}`)
+    if (clientByEmail) {
+      if (clientByEmail.bookings.length > 0) {
+        upcomingBookings = clientByEmail.bookings as BookingWithRelations[]
+        client = { name: clientByEmail.name }
+        // Redirecionar para salvar o clientId no cookie
+        redirect(`/api/save-client-cookie?clientId=${clientByEmail.id}`)
+      } else {
+        // Cliente existe mas não tem bookings ainda - salvar clientId mesmo assim
+        redirect(`/api/save-client-cookie?clientId=${clientByEmail.id}`)
+      }
+    } else {
+      // Cliente não existe ainda - pode ser que o webhook ainda não processou
+      // Buscar bookings diretamente pelo email do client (join)
+      const bookingsByClientEmail = await db.booking.findMany({
+        where: {
+          client: {
+            email: clientEmailFromCookie,
+          },
+          status: "confirmed",
+          isRefunded: false,
+          date: {
+            gte: now,
+          },
+        },
+        include: bookingInclude,
+        orderBy: {
+          date: "asc",
+        },
+      })
+
+      if (bookingsByClientEmail.length > 0) {
+        upcomingBookings = bookingsByClientEmail as BookingWithRelations[]
+        // Buscar cliente do primeiro booking
+        if (bookingsByClientEmail[0].clientId) {
+          const foundClient = await db.client.findUnique({
+            where: { id: bookingsByClientEmail[0].clientId },
+            select: { name: true },
+          })
+          if (foundClient) {
+            client = { name: foundClient.name }
+          }
+          redirect(`/api/save-client-cookie?clientId=${bookingsByClientEmail[0].clientId}`)
+        }
+      }
     }
   }
 
@@ -222,18 +263,23 @@ const Home = async ({ searchParams }: HomeProps) => {
       ? `Olá, ${client.name}!` 
       : "Olá!"
 
+  // Verificar se tem email mas não tem bookings (webhook pode estar processando)
+  const hasEmail = !!(clientEmailFromCookie || user?.email)
+  const hasBookings = upcomingBookings.length > 0
+
   return (
     <div>
       <Header />
       <RatingCheck />
-      <div className="p-5">
+      <BookingPolling hasEmail={hasEmail} hasBookings={hasBookings} />
+      <div className="p-3 md:p-5">
         {/* SAUDAÇÃO */}
-        <p className="mb-2 text-xl font-bold text-white">
+        <p className="mb-1.5 md:mb-2 text-lg md:text-xl font-bold text-white">
           {greeting}
         </p>
 
         {/* DATA */}
-        <p className="text-sm text-gray-400">
+        <p className="text-xs md:text-sm text-gray-400">
           <span className="capitalize">
             {format(new Date(), "EEEE, dd", { locale: ptBR })}
           </span>
@@ -244,16 +290,16 @@ const Home = async ({ searchParams }: HomeProps) => {
         </p>
 
         {/* TEXTO PRINCIPAL */}
-        <p className="mt-2 text-sm text-gray-400">
-          Agende e pague. Simples, fácil em segundos.
+        <p className="mt-1.5 md:mt-2 text-xs md:text-sm text-gray-400">
+          Agende e pague em segundos. Sem burocracia!
         </p>
 
         {/* SEÇÃO DE AGENDAMENTOS */}
-        <div className="mt-6">
+        <div className="mt-4 md:mt-6">
           {/* Linha separadora acima de AGENDAMENTOS */}
-          <div className="mb-3 border-b border-solid"></div>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase text-gray-400">
+          <div className="mb-2 md:mb-3 border-b border-solid"></div>
+          <div className="mb-2 md:mb-3 flex items-center justify-between">
+            <h2 className="text-[10px] md:text-xs font-bold uppercase text-gray-400">
               AGENDAMENTOS
             </h2>
             {upcomingBookings.length > 0 && upcomingBookings[0].status === "confirmed" && (
@@ -270,17 +316,17 @@ const Home = async ({ searchParams }: HomeProps) => {
               barbershop={barbershop ? JSON.parse(JSON.stringify(barbershop)) : undefined}
             />
           ) : (
-            <Card className="bg-[#1A1B1F] rounded-2xl border border-gray-800">
-              <CardContent className="p-4">
+            <Card className="bg-[#1A1B1F] rounded-xl md:rounded-2xl border border-gray-800">
+              <CardContent className="p-3 md:p-4">
                 {/* Badge Sem agendamento */}
-                <div className="mb-4">
-                  <span className="inline-block rounded-full bg-[#EE8530] px-3 py-1.5 text-xs font-semibold text-white shadow-sm">
+                <div className="mb-3 md:mb-4">
+                  <span className="inline-block rounded-full bg-[#EE8530] px-2.5 md:px-3 py-1 md:py-1.5 text-[10px] md:text-xs font-semibold text-white shadow-sm">
                     Sem agendamento
                   </span>
                 </div>
 
                 {/* Conteúdo principal */}
-                <p className="text-base font-semibold text-white leading-relaxed">
+                <p className="text-sm md:text-base font-semibold text-white leading-relaxed">
                   Nenhum agendamento, vamos agendar?
                 </p>
               </CardContent>
@@ -288,25 +334,25 @@ const Home = async ({ searchParams }: HomeProps) => {
           )}
           
           {/* Linha separadora abaixo do card de agendamentos */}
-          <div className="mt-6 border-b border-solid"></div>
+          <div className="mt-4 md:mt-6 border-b border-solid"></div>
         </div>
 
         {/* BOTÕES DE SERVIÇOS - Filtros */}
         {services.length > 0 && (
-          <div className="mt-6 flex gap-3 overflow-x-scroll [&::-webkit-scrollbar]:hidden">
+          <div className="mt-4 md:mt-6 flex gap-2 md:gap-3 overflow-x-scroll [&::-webkit-scrollbar]:hidden">
             {services.map((service) => {
               const isActive = searchParams.service === service.name
               return (
                 <Card
                   key={service.id}
-                  className={`min-w-[90px] rounded-xl flex-shrink-0 ${
+                  className={`min-w-[75px] md:min-w-[90px] rounded-lg md:rounded-xl flex-shrink-0 ${
                     isActive ? "bg-[#EE8530]" : "bg-[#1A1B1F]"
                   }`}
                 >
-                  <CardContent className="px-4 py-2">
+                  <CardContent className="px-3 md:px-4 py-1.5 md:py-2">
                     <Button
                       variant="ghost"
-                      className={`h-auto p-0 text-sm font-bold hover:bg-transparent w-full text-center ${
+                      className={`h-auto p-0 text-xs md:text-sm font-bold hover:bg-transparent w-full text-center ${
                         isActive ? "text-black" : "text-white"
                       }`}
                       size="sm"
@@ -330,10 +376,10 @@ const Home = async ({ searchParams }: HomeProps) => {
         )}
 
         {/* PROFISSIONAIS */}
-        <h2 className="mb-3 mt-6 text-xs font-bold uppercase text-gray-400">
+        <h2 className="mb-2 md:mb-3 mt-4 md:mt-6 text-[10px] md:text-xs font-bold uppercase text-gray-400">
           Nossos profissionais
         </h2>
-        <div className="flex gap-4 overflow-auto [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-3 md:gap-4 overflow-auto [&::-webkit-scrollbar]:hidden">
           {professionalsWithRating.map((professional) => (
             <ProfessionalItem
               key={professional.id}

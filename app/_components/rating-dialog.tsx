@@ -49,6 +49,8 @@ const RatingDialog = ({ booking, open, onOpenChange }: RatingDialogProps) => {
         score: rating,
       })
       toast.success("Avaliação enviada com sucesso!")
+      // Disparar evento para atualizar stats na aba "Visão geral"
+      window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "completed" } }))
       onOpenChange(false)
       router.refresh()
     } catch (error) {

@@ -13,9 +13,10 @@ import { useRouter } from "next/navigation"
 interface AdminProfessionalsTabProps {
   professionals: any[]
   services: any[]
+  barbershop: any
 }
 
-const AdminProfessionalsTab = ({ professionals, services }: AdminProfessionalsTabProps) => {
+const AdminProfessionalsTab = ({ professionals, services, barbershop }: AdminProfessionalsTabProps) => {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [selectedProfessional, setSelectedProfessional] = useState<any>(null)
   const router = useRouter()
@@ -139,6 +140,7 @@ const AdminProfessionalsTab = ({ professionals, services }: AdminProfessionalsTa
         onOpenChange={setDialogOpen}
         professional={selectedProfessional}
         services={services}
+        barbershop={barbershop}
         onSuccess={handleDialogSuccess}
       />
     </div>

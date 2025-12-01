@@ -1,11 +1,13 @@
 import Header from "../_components/header"
 import { Card, CardContent } from "../_components/ui/card"
 import { Button } from "../_components/ui/button"
-import { CheckCircle2 } from "lucide-react"
+import { CheckCircle2, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { headers } from "next/headers"
 import { db } from "../_lib/prisma"
 import { redirect } from "next/navigation"
+import { processCheckoutSession } from "../_actions/process-checkout-session"
+import SuccessRedirect from "../_components/success-redirect"
 
 interface SuccessPageProps {
   searchParams: {
@@ -39,11 +41,30 @@ const SuccessPage = async ({ searchParams }: SuccessPageProps) => {
   const sessionId = searchParams.session_id
 
   if (!sessionId) {
-    redirect("/")
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center min-h-[60vh]">
+          <Card className="w-full max-w-md">
+            <CardContent className="p-6 text-center">
+              <p className="text-gray-400 mb-4">Sessão não encontrada</p>
+              <Button asChild>
+                <Link href="/">Voltar para Home</Link>
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
   }
 
+  // Primeiro, buscar sessão diretamente do Stripe para pegar o email
+  // Isso garante que temos o email mesmo se o webhook ainda não processou
+  const stripeSession = await getStripeSession(sessionId)
+  const clientEmail = stripeSession?.customer_details?.email
+
   // Buscar o booking criado após o pagamento
-  const payment = await db.payment.findUnique({
+  let payment = await db.payment.findUnique({
     where: {
       stripeId: sessionId,
     },
@@ -58,32 +79,92 @@ const SuccessPage = async ({ searchParams }: SuccessPageProps) => {
     },
   })
 
-  // Se encontrou payment e booking, processar normalmente
-  if (payment?.booking) {
-    // Redirecionar para route handler que salva o cookie
-    if (payment.booking.client?.email) {
-      console.log("📧 Redirecionando para salvar email no cookie:", payment.booking.client.email)
-      redirect(`/api/save-client-cookie?email=${encodeURIComponent(payment.booking.client.email)}&clientId=${payment.booking.clientId}`)
-    } else {
-      redirect(`/api/save-client-cookie?clientId=${payment.booking.clientId}`)
+  // Processar tudo no servidor primeiro
+  let clientIdToSave: string | null = null
+
+  // Se não encontrou payment, processar a sessão diretamente (simular webhook)
+  // Isso garante que os dados apareçam mesmo se o webhook não for chamado
+  if (!payment && stripeSession?.payment_status === "paid") {
+    console.log("⚠️ Payment não encontrado. Processando sessão diretamente (simulando webhook)...")
+    console.log("📦 Metadata da sessão:", JSON.stringify(stripeSession.metadata, null, 2))
+    
+    try {
+      const result = await processCheckoutSession({ sessionId })
+      
+      if (result.success) {
+        if (result.booking) {
+          console.log("✅ Booking criado diretamente:", result.booking.id)
+          console.log("👤 Client ID:", result.clientId)
+          
+          // Buscar payment atualizado
+          payment = await db.payment.findUnique({
+            where: {
+              stripeId: sessionId,
+            },
+            include: {
+              booking: {
+                include: {
+                  service: true,
+                  professional: true,
+                  client: true,
+                },
+              },
+            },
+          })
+        }
+        
+        // Salvar cookie usando clientId (mais seguro - não expõe email na URL)
+        if (result.clientId) {
+          clientIdToSave = result.clientId
+          const { saveClientCookie } = await import("../_actions/save-client-cookie")
+          await saveClientCookie({ clientId: result.clientId })
+        } else if (clientEmail) {
+          const { saveClientCookie } = await import("../_actions/save-client-cookie")
+          await saveClientCookie({ email: clientEmail })
+        }
+      } else {
+        console.error("❌ Erro ao processar sessão:", result.error)
+        if (clientEmail) {
+          const { saveClientCookie } = await import("../_actions/save-client-cookie")
+          await saveClientCookie({ email: clientEmail })
+        }
+      }
+    } catch (error: any) {
+      console.error("❌ Erro ao processar checkout session:", error)
+      if (clientEmail) {
+        const { saveClientCookie } = await import("../_actions/save-client-cookie")
+        await saveClientCookie({ email: clientEmail })
+      }
     }
   }
 
-  // Se não encontrou, pode ser que o webhook ainda não processou
-  console.log("⚠️ Payment não encontrado ou sem booking. Session ID:", sessionId)
-  
-  // Tentar buscar payment diretamente
-  const paymentDirect = await db.payment.findUnique({
-    where: { stripeId: sessionId },
-  })
-  
-  if (paymentDirect) {
-    console.log("💳 Payment encontrado:", paymentDirect.id)
+  // Se encontrou payment e booking, processar normalmente
+  if (payment?.booking) {
+    const booking = payment.booking
+    const email = booking.client?.email || clientEmail
     
-    // Buscar booking pelo paymentId
+    console.log("✅ Booking encontrado:", booking.id)
+    console.log("📧 Email do cliente:", email)
+    console.log("👤 Client ID:", booking.clientId)
+    
+    // Salvar cookie usando clientId (mais seguro)
+    if (booking.clientId) {
+      clientIdToSave = booking.clientId
+      const { saveClientCookie } = await import("../_actions/save-client-cookie")
+      await saveClientCookie({ clientId: booking.clientId })
+    } else if (email) {
+      const { saveClientCookie } = await import("../_actions/save-client-cookie")
+      await saveClientCookie({ email })
+    }
+  }
+
+  // Se não encontrou booking mas tem payment, buscar booking pelo paymentId
+  if (payment && !payment.booking) {
+    console.log("💳 Payment encontrado mas sem booking. Buscando booking pelo paymentId...")
+    
     const bookingByPayment = await db.booking.findFirst({
       where: {
-        paymentId: paymentDirect.id,
+        paymentId: payment.id,
       },
       include: {
         service: true,
@@ -95,32 +176,50 @@ const SuccessPage = async ({ searchParams }: SuccessPageProps) => {
     if (bookingByPayment) {
       console.log("✅ Booking encontrado pelo paymentId:", bookingByPayment.id)
       
-      // Redirecionar para route handler que salva o cookie
-      if (bookingByPayment.client?.email) {
-        redirect(`/api/save-client-cookie?email=${encodeURIComponent(bookingByPayment.client.email)}&clientId=${bookingByPayment.clientId}`)
-      } else {
-        redirect(`/api/save-client-cookie?clientId=${bookingByPayment.clientId}`)
+      const email = bookingByPayment.client?.email || clientEmail
+      
+      if (bookingByPayment.clientId) {
+        clientIdToSave = bookingByPayment.clientId
+        const { saveClientCookie } = await import("../_actions/save-client-cookie")
+        await saveClientCookie({ clientId: bookingByPayment.clientId })
+      } else if (email) {
+        const { saveClientCookie } = await import("../_actions/save-client-cookie")
+        await saveClientCookie({ email })
       }
     }
   }
 
-  // Se ainda não encontrou, buscar sessão diretamente do Stripe
-  // para pegar o email do cliente e salvar no cookie
-  console.log("🔍 Buscando sessão diretamente do Stripe...")
-  const stripeSession = await getStripeSession(sessionId)
-  
-  if (stripeSession?.customer_details?.email) {
-    const clientEmail = stripeSession.customer_details.email
-    console.log("📧 Email encontrado na sessão do Stripe:", clientEmail)
-    
-    // Redirecionar para route handler que salva o cookie (NÃO passar email na URL final)
-    // O route handler vai salvar no cookie e redirecionar para home
-    redirect(`/api/save-client-cookie?email=${encodeURIComponent(clientEmail)}`)
+  // Se ainda não encontrou, mas tem email do Stripe, salvar email no cookie
+  if (clientEmail && !clientIdToSave) {
+    console.log("📧 Email encontrado na sessão do Stripe. Salvando no cookie...")
+    const { saveClientCookie } = await import("../_actions/save-client-cookie")
+    await saveClientCookie({ email: clientEmail })
   }
   
-  // Redirecionar para home - quando o webhook processar, os agendamentos aparecerão
-  console.log("⏳ Redirecionando para home - webhook processará em breve")
-  redirect("/")
+  // Renderizar página de sucesso com redirect automático
+  // Isso evita tela preta enquanto processa
+  return (
+    <div className="min-h-screen bg-background">
+      <Header />
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center space-y-4">
+            <div className="flex justify-center">
+              <CheckCircle2 className="h-16 w-16 text-green-500" />
+            </div>
+            <h1 className="text-2xl font-bold">Pagamento confirmado!</h1>
+            <p className="text-gray-400">
+              Seu agendamento foi realizado com sucesso. Você será redirecionado em instantes...
+            </p>
+            <div className="flex justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-[#EE8530]" />
+            </div>
+            <SuccessRedirect clientId={clientIdToSave} />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
 }
 
 export default SuccessPage

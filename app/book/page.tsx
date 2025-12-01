@@ -34,6 +34,13 @@ const BookPage = async ({ searchParams }: BookPageProps) => {
     },
   })
 
+  // Buscar horários da empresa uma vez
+  const barbershop = await db.barbershop.findFirst({
+    include: {
+      businessHours: true,
+    },
+  })
+
   if (!professional) {
     return notFound()
   }
@@ -64,6 +71,7 @@ const BookPage = async ({ searchParams }: BookPageProps) => {
           <BookingFlow
             professional={JSON.parse(JSON.stringify(normalizedProfessional))}
             averageRating={averageRating}
+            businessHours={barbershop ? JSON.parse(JSON.stringify(barbershop.businessHours)) : []}
           />
         </Suspense>
       </div>

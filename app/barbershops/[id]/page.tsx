@@ -34,6 +34,34 @@ const BarbershopPage = async ({ params }: BarbershopPageProps) => {
     },
   })
 
+  // Buscar horários da empresa uma vez (usar o ID da barbearia encontrada)
+  const businessHours = await db.businessHours.findMany({
+    where: {
+      barbershopId: barbershop.id,
+    },
+  })
+
+  // Buscar todos os profissionais e seus horários de uma vez
+  const allProfessionals = await db.professional.findMany({
+    include: {
+      weeklySchedule: true,
+      services: {
+        include: {
+          service: true,
+        },
+      },
+    },
+  })
+
+  // Criar mapa de profissionais por serviço
+  const professionalsByService = new Map<string, typeof allProfessionals>()
+  services.forEach((service) => {
+    const serviceProfessionals = allProfessionals.filter((prof) =>
+      prof.services.some((ps) => ps.serviceId === service.id)
+    )
+    professionalsByService.set(service.id, serviceProfessionals)
+  })
+
   return (
     <div>
       {/* IMAGEM */}
@@ -94,13 +122,18 @@ const BarbershopPage = async ({ params }: BarbershopPageProps) => {
       <div className="space-y-3 border-b border-solid p-5">
         <h2 className="text-xs font-bold uppercase text-gray-400">Serviços</h2>
         <div className="space-y-3">
-          {services.map((service) => (
-            <ServiceItem
-              key={service.id}
-              barbershop={JSON.parse(JSON.stringify(barbershop))}
-              service={service}
-            />
-          ))}
+          {services.map((service) => {
+            const serviceProfessionals = professionalsByService.get(service.id) || []
+            return (
+              <ServiceItem
+                key={service.id}
+                barbershop={JSON.parse(JSON.stringify(barbershop))}
+                service={service}
+                businessHours={JSON.parse(JSON.stringify(businessHours))}
+                professionals={JSON.parse(JSON.stringify(serviceProfessionals))}
+              />
+            )
+          })}
         </div>
       </div>
 

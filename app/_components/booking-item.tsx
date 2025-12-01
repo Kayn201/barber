@@ -201,6 +201,8 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
       })
       if (result.success) {
         toast.success("Reembolso solicitado com sucesso!")
+        // Disparar evento para atualizar stats na aba "Visão geral"
+        window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "refunded" } }))
         setIsSheetOpen(false)
         window.location.reload()
       } else {
@@ -234,6 +236,8 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
       })
       if (result.success) {
         toast.success("Agendamento reagendado com sucesso!")
+        // Disparar evento para atualizar stats na aba "Visão geral"
+        window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "rescheduled" } }))
         setRescheduleDialogOpen(false)
         setIsSheetOpen(false)
         window.location.reload()
@@ -333,35 +337,68 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
       </SheetTrigger>
       <SheetContent className="w-[85%]">
         <SheetHeader>
-          <SheetTitle className="text-left">Informações da Reserva</SheetTitle>
+          <SheetTitle className="text-left text-base md:text-lg">Informações da Reserva</SheetTitle>
         </SheetHeader>
 
         {barbershop && (
-          <div className="relative mt-6 flex h-[180px] w-full items-end">
+          <div
+            onClick={() => {
+              const address = barbershop.address
+              if (!address) return
+
+              // Tentar abrir Waze primeiro (deep link)
+              const wazeUrl = `waze://?q=${encodeURIComponent(address)}`
+              const googleMapsUrl = `https://maps.google.com/?q=${encodeURIComponent(address)}`
+              
+              // Detectar se o Waze foi aberto (a página perde o foco)
+              let wazeOpened = false
+              const handleBlur = () => {
+                wazeOpened = true
+                window.removeEventListener('blur', handleBlur)
+              }
+              window.addEventListener('blur', handleBlur)
+              
+              // Tentar abrir Waze via iframe (mais confiável em mobile)
+              const iframe = document.createElement('iframe')
+              iframe.style.display = 'none'
+              iframe.src = wazeUrl
+              document.body.appendChild(iframe)
+              
+              // Se Waze não abrir em 1 segundo, abrir Google Maps
+              setTimeout(() => {
+                if (!wazeOpened) {
+                  window.open(googleMapsUrl, '_blank', 'noopener,noreferrer')
+                }
+                document.body.removeChild(iframe)
+                window.removeEventListener('blur', handleBlur)
+              }, 1000)
+            }}
+            className="relative mt-4 md:mt-6 flex h-[120px] md:h-[180px] w-full items-end cursor-pointer group"
+          >
             <Image
-              alt={`Mapa da barbearia ${barbershop.name}`}
+              alt={`Mapa do estabelecimento ${barbershop.name}`}
               src="/map.png"
               fill
-              className="rounded-xl object-cover"
+              className="rounded-xl object-cover transition-opacity group-hover:opacity-90"
             />
 
-            <Card className="z-50 mx-5 mb-3 w-full rounded-xl">
-              <CardContent className="flex items-center gap-3 px-5 py-3">
-                <Avatar>
+            <Card className="z-50 mx-3 md:mx-5 mb-2 md:mb-3 w-full rounded-xl pointer-events-none">
+              <CardContent className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3">
+                <Avatar className="h-8 w-8 md:h-10 md:w-10 flex-shrink-0">
                   <AvatarImage src={barbershop.imageUrl} />
                 </Avatar>
-                <div>
-                  <h3 className="font-bold">{barbershop.name}</h3>
-                  <p className="text-xs">{barbershop.address}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-sm md:text-base truncate">{barbershop.name}</h3>
+                  <p className="text-[10px] md:text-xs text-gray-400 line-clamp-2 break-words">{barbershop.address}</p>
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        <div className="mt-6">
+        <div className="mt-4 md:mt-6">
           <Badge
-            className="w-fit"
+            className="w-fit text-[10px] md:text-xs px-2 md:px-3 py-0.5 md:py-1"
             variant={isConfirmed ? "default" : "secondary"}
           >
             {isConfirmed ? "Confirmado" : "Finalizado"}
@@ -369,7 +406,7 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
 
           {barbershop && (
             <>
-              <div className="mb-3 mt-6">
+              <div className="mb-3 mt-4 md:mt-6">
                 <BookingSummary
                   barbershop={barbershop}
                   service={booking.service}
@@ -377,7 +414,7 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
                 />
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {barbershop.phones.map((phone, index) => (
                   <PhoneItem key={index} phone={phone} />
                 ))}
@@ -515,16 +552,16 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
                           {isRefunding ? "Processando..." : "Pedir Reembolso"}
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="w-[90%]">
-                        <DialogHeader>
-                          <DialogTitle>Você deseja solicitar reembolso?</DialogTitle>
-                          <DialogDescription>
+                      <DialogContent className="w-[90%] max-w-md">
+                        <DialogHeader className="space-y-2 md:space-y-3">
+                          <DialogTitle className="text-base md:text-lg">Você deseja solicitar reembolso?</DialogTitle>
+                          <DialogDescription className="text-xs md:text-sm">
                             Ao solicitar reembolso, você receberá o valor pago de volta e o agendamento será cancelado. Esta ação é irreversível.
                           </DialogDescription>
                         </DialogHeader>
-                        <DialogFooter className="flex flex-row gap-3">
+                        <DialogFooter className="flex flex-col sm:flex-row gap-2 md:gap-3 mt-4 md:mt-6">
                           <DialogClose asChild>
-                            <Button variant="secondary" className="w-full">
+                            <Button variant="secondary" className="w-full text-xs md:text-sm h-9 md:h-10">
                               Cancelar
                             </Button>
                           </DialogClose>
@@ -533,7 +570,7 @@ const BookingItem = ({ booking, barbershop, isRescheduled = false }: BookingItem
                               variant="destructive"
                               onClick={handleRefund}
                               disabled={isRefunding}
-                              className="w-full"
+                              className="w-full text-xs md:text-sm h-9 md:h-10"
                             >
                               {isRefunding ? "Processando..." : "Confirmar Reembolso"}
                             </Button>

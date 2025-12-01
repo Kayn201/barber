@@ -89,6 +89,37 @@ export const getConfirmedBookings = async () => {
       // Filtrar apenas os que são futuros
       return bookings.filter((booking) => isFuture(new Date(booking.date)))
     }
+    
+    // Se não encontrou cliente pelo email, tentar buscar bookings diretamente pelo email do client
+    // (caso o cliente tenha sido criado mas a busca acima não encontrou)
+    const bookingsWithClient = await db.booking.findMany({
+      where: {
+        client: {
+          email: clientEmail,
+        },
+        status: "confirmed",
+        isRefunded: false,
+      },
+      include: {
+        service: true,
+        professional: true,
+        client: true,
+        payment: true,
+      },
+      orderBy: {
+        date: "asc",
+      },
+    })
+    
+    const futureBookings = bookingsWithClient.filter((booking) => isFuture(new Date(booking.date)))
+    
+    // Se encontrou bookings, salvar clientId no cookie
+    if (futureBookings.length > 0 && futureBookings[0].clientId) {
+      const { saveClientId } = await import("../_actions/save-client-id")
+      await saveClientId(futureBookings[0].clientId)
+    }
+    
+    return futureBookings
   }
 
   return []

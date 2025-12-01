@@ -99,6 +99,8 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
   const [addressSuggestions, setAddressSuggestions] = useState<string[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [imagePreview, setImagePreview] = useState<string>("")
+  const [isUploading, setIsUploading] = useState(false)
 
   // Buscar endereços usando APIs gratuitas
   const handleAddressChange = (value: string) => {
@@ -122,17 +124,26 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
       const timeout = setTimeout(async () => {
         try {
           const response = await fetch(`https://viacep.com.br/ws/${cepOnly}/json/`)
-          if (response.ok) {
-            const data = await response.json()
-            if (!data.erro) {
-              const address = `${data.logradouro || ''}, ${data.bairro || ''}, ${data.localidade || ''} - ${data.uf || ''}, CEP: ${data.cep || ''}`
-                .replace(/^,\s*|,\s*$/g, '') // Remove vírgulas no início/fim
-                .replace(/,\s*,/g, ',') // Remove vírgulas duplas
-              setAddressSuggestions([address])
-              setShowSuggestions(true)
-              return
+        if (response.ok) {
+          const data = await response.json()
+          if (!data.erro) {
+            // Formatar endereço completo com número (se disponível)
+            const parts = []
+            if (data.logradouro) {
+              // Se não tiver número no logradouro, adicionar instrução
+              parts.push(data.logradouro)
             }
+            if (data.bairro) parts.push(data.bairro)
+            if (data.localidade) parts.push(data.localidade)
+            if (data.uf) parts.push(data.uf)
+            if (data.cep) parts.push(`CEP: ${data.cep}`)
+            
+            const address = parts.join(', ')
+            setAddressSuggestions([address])
+            setShowSuggestions(true)
+            return
           }
+        }
         } catch (error) {
           console.error("Erro ao buscar CEP:", error)
         }
@@ -157,19 +168,38 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
         if (response.ok) {
           const data = await response.json()
           const suggestions = data.map((item: any) => {
-            // Formatar endereço completo
+            // Formatar endereço completo priorizando número
             const parts = []
-            if (item.address?.road) parts.push(item.address.road)
-            if (item.address?.house_number) parts.push(item.address.house_number)
+            
+            // Rua/Logradouro com número (prioridade)
+            if (item.address?.road) {
+              const road = item.address.road
+              const houseNumber = item.address?.house_number
+              // Se tiver número, adicionar junto com a rua
+              if (houseNumber) {
+                parts.push(`${road}, ${houseNumber}`)
+              } else {
+                parts.push(road)
+              }
+            }
+            
+            // Bairro
             if (item.address?.neighbourhood || item.address?.suburb) {
               parts.push(item.address.neighbourhood || item.address.suburb)
             }
+            
+            // Cidade
             if (item.address?.city || item.address?.town) {
               parts.push(item.address.city || item.address.town)
             }
+            
+            // Estado
             if (item.address?.state) parts.push(item.address.state)
+            
+            // CEP
             if (item.address?.postcode) parts.push(`CEP: ${item.address.postcode}`)
             
+            // Se não conseguiu montar com address, usar display_name
             return parts.length > 0 ? parts.join(', ') : item.display_name
           })
           
@@ -206,6 +236,45 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
       }
     }
   }, [searchTimeout])
+
+  // Atualizar preview quando formData.imageUrl mudar
+  useEffect(() => {
+    if (formData.imageUrl) {
+      setImagePreview(formData.imageUrl)
+    }
+  }, [formData.imageUrl])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const uploadFormData = new FormData()
+      uploadFormData.append("file", file)
+      uploadFormData.append("imageType", "business")
+
+      const response = await fetch("/api/upload-image", {
+        method: "POST",
+        body: uploadFormData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setFormData((prev) => ({ ...prev, imageUrl: data.imageUrl }))
+        setImagePreview(data.imageUrl)
+        toast.success("Imagem carregada e otimizada com sucesso!")
+      } else {
+        toast.error(data.error || "Erro ao carregar imagem")
+      }
+    } catch (error) {
+      console.error("Erro ao fazer upload:", error)
+      toast.error("Erro ao fazer upload da imagem")
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -296,19 +365,35 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
 
         <Card className="bg-[#1A1B1F] border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white">{formData.name}</CardTitle>
+            <div className="flex items-center gap-4">
+              {formData.imageUrl && (
+                <div className="flex-shrink-0">
+                  <img
+                    src={formData.imageUrl}
+                    alt={formData.name}
+                    className="w-16 h-16 object-cover rounded-full border border-gray-800"
+                  />
+                </div>
+              )}
+              <CardTitle className="text-white">{formData.name}</CardTitle>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             {formData.businessNumber && (
               <div>
                 <p className="text-sm text-gray-400">CNPJ</p>
-                <p className="text-white font-semibold">{formData.businessNumber}</p>
+                <p className="text-white font-semibold break-words break-all">{formData.businessNumber}</p>
               </div>
             )}
 
             <div>
-              <p className="text-sm text-gray-400">Endereço</p>
+              <p className="text-sm text-gray-400">Endereço Completo</p>
               <p className="text-white font-semibold">{formData.address}</p>
+              {formData.address && !/\d/.test(formData.address) && (
+                <p className="text-xs text-amber-400 mt-1">
+                  ⚠️ Adicione o número do endereço para que os mapas funcionem corretamente
+                </p>
+              )}
             </div>
 
             {formData.phones.length > 0 && formData.phones[0] && (
@@ -373,9 +458,20 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
 
       <Card className="bg-[#1A1B1F] border-gray-800">
         <CardHeader>
-          <CardTitle className="text-white">
-            {hasData ? "Editar Informações da Empresa" : "Informações da Empresa"}
-          </CardTitle>
+          <div className="flex items-start gap-4">
+            {imagePreview && (
+              <div className="flex-shrink-0 mt-1">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="w-16 h-16 object-cover rounded-full border border-gray-800"
+                />
+              </div>
+            )}
+            <CardTitle className="text-white flex-1">
+              {hasData ? "Editar Informações da Empresa" : "Informações da Empresa"}
+            </CardTitle>
+          </div>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -391,7 +487,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                 }
                 placeholder="Nome da barbearia"
                 required
-                className="bg-background"
+                className="bg-background w-full min-w-0"
               />
             </div>
 
@@ -404,7 +500,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                   setFormData({ ...formData, businessNumber: e.target.value })
                 }
                 placeholder="00.000.000/0000-00"
-                className="bg-background"
+                className="bg-background w-full min-w-0"
               />
             </div>
 
@@ -425,13 +521,18 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                   // Aguardar um pouco antes de fechar para permitir clique na sugestão
                   setTimeout(() => setShowSuggestions(false), 200)
                 }}
-                placeholder="Digite o CEP (ex: 01310-100) ou endereço (ex: Rua Augusta, São Paulo)"
+                placeholder="Ex: Rua Exemplo, 123 - Bairro, Cidade - Estado, CEP 01234-567"
                 required
-                className="bg-background"
+                className="bg-background w-full min-w-0"
               />
-              <p className="text-xs text-gray-500">
-                💡 Dica: Digite um CEP de 8 dígitos ou um endereço para ver sugestões
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-amber-400 font-medium">
+                  📍 Importante: Inclua o número do endereço para que os mapas (Waze e Google Maps) funcionem corretamente!
+                </p>
+                <p className="text-xs text-gray-500">
+                  💡 Dica: Digite um CEP de 8 dígitos ou um endereço completo (com número) para ver sugestões automáticas
+                </p>
+              </div>
               {showSuggestions && addressSuggestions.length > 0 && (
                 <div className="absolute z-10 w-full mt-1 bg-background border border-gray-800 rounded-md shadow-lg max-h-60 overflow-y-auto">
                   {addressSuggestions.map((suggestion, index) => (
@@ -457,7 +558,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                     onChange={(e) => updatePhone(index, e.target.value)}
                     placeholder="(00) 00000-0000"
                     required
-                    className="bg-background"
+                    className="bg-background w-full min-w-0 flex-1"
                   />
                   {formData.phones.length > 1 && (
                     <Button
@@ -465,6 +566,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                       variant="destructive"
                       size="icon"
                       onClick={() => removePhone(index)}
+                      className="flex-shrink-0"
                     >
                       ×
                     </Button>
@@ -496,16 +598,36 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="imageUrl">URL da Imagem</Label>
-              <Input
-                id="imageUrl"
-                value={formData.imageUrl}
-                onChange={(e) =>
-                  setFormData({ ...formData, imageUrl: e.target.value })
-                }
-                placeholder="https://exemplo.com/imagem.jpg"
-                className="bg-background"
-              />
+              <Label htmlFor="image">Logo da Empresa</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="image"
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                  className="hidden"
+                />
+                <Input
+                  type="text"
+                  value={imagePreview ? "Imagem selecionada" : "Nenhuma imagem selecionada"}
+                  readOnly
+                  className="bg-background flex-1 cursor-default w-full min-w-0"
+                  placeholder="Selecione uma imagem"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById("image")?.click()}
+                  disabled={isUploading}
+                  className="flex-shrink-0"
+                >
+                  {isUploading ? "Carregando..." : "Escolher Arquivo"}
+                </Button>
+              </div>
+              <p className="text-xs text-gray-500">
+                O sistema redimensiona automaticamente imagens grandes (como 1080x1080) para o tamanho ideal. Formatos aceitos: JPG, PNG, WEBP, GIF. Tamanho máximo: 10MB.
+              </p>
             </div>
 
             {/* Horário de Funcionamento */}
@@ -519,27 +641,27 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                   return (
                     <div
                       key={day.value}
-                      className="flex items-center gap-4 p-3 rounded-md border border-gray-800 bg-background"
+                      className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 p-2 md:p-3 rounded-md border border-gray-800 bg-background"
                     >
-                      <div className="flex items-center gap-2 min-w-[140px]">
+                      <div className="flex items-center gap-2 md:min-w-[140px] flex-shrink-0">
                         <Switch
                           checked={schedule?.isAvailable || false}
                           onCheckedChange={(checked) =>
                             updateSchedule(day.value, "isAvailable", checked)
                           }
                         />
-                        <span className="text-sm font-medium">{day.label}</span>
+                        <span className="text-xs md:text-sm font-medium whitespace-nowrap">{day.label}</span>
                       </div>
 
                       {schedule?.isAvailable && (
-                        <div className="flex items-center gap-2 flex-1">
+                        <div className="flex items-center gap-1.5 md:gap-2 flex-1 min-w-0">
                           <Select
                             value={schedule.startTime}
                             onValueChange={(value) =>
                               updateSchedule(day.value, "startTime", value)
                             }
                           >
-                            <SelectTrigger className="w-[120px] bg-background">
+                            <SelectTrigger className="w-[90px] md:w-[120px] bg-background flex-shrink-0 text-xs md:text-sm h-9 md:h-10">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -551,7 +673,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                             </SelectContent>
                           </Select>
 
-                          <span className="text-gray-400">até</span>
+                          <span className="text-gray-400 whitespace-nowrap text-xs md:text-sm">até</span>
 
                           <Select
                             value={schedule.endTime}
@@ -559,7 +681,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                               updateSchedule(day.value, "endTime", value)
                             }
                           >
-                            <SelectTrigger className="w-[120px] bg-background">
+                            <SelectTrigger className="w-[90px] md:w-[120px] bg-background flex-shrink-0 text-xs md:text-sm h-9 md:h-10">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -574,7 +696,7 @@ const AdminBusinessProfileTab = ({ barbershop }: AdminBusinessProfileTabProps) =
                       )}
 
                       {!schedule?.isAvailable && (
-                        <span className="text-sm text-gray-500">Fechado</span>
+                        <span className="text-xs md:text-sm text-gray-500 md:ml-auto">Fechado</span>
                       )}
                     </div>
                   )

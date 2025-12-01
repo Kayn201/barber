@@ -73,10 +73,15 @@ export default function GenerateWalletButton({
       disabled={isGenerating}
       variant="outline"
       size="sm"
-      className="flex items-center gap-2 text-[#EE8530] border-[#EE8530] hover:bg-[#EE8530]/10"
+      className="flex items-center gap-1 md:gap-2 text-[#EE8530] border-[#EE8530] hover:bg-[#EE8530]/10 text-xs md:text-sm h-7 md:h-9 px-2 md:px-3"
     >
-      <Wallet className="h-4 w-4" />
-      {isGenerating ? "Gerando..." : hasWalletPass ? "Atualizar Wallet" : "Gerar Wallet"}
+      <Wallet className="h-3 w-3 md:h-4 md:w-4" />
+      <span className="hidden sm:inline">
+        {isGenerating ? "Gerando..." : hasWalletPass ? "Atualizar Wallet" : "Gerar Wallet"}
+      </span>
+      <span className="sm:hidden">
+        {isGenerating ? "..." : "Wallet"}
+      </span>
     </Button>
   )
 }

@@ -1,5 +1,6 @@
 import { db } from "../_lib/prisma"
 import AdminDashboard from "../_components/admin-dashboard"
+import { getAdminStats } from "../_actions/get-admin-stats"
 
 const AdminPage = async () => {
   const services = await db.barbershopService.findMany({
@@ -37,7 +38,13 @@ const AdminPage = async () => {
 
   const subscriptions = await db.subscription.findMany({
     include: {
-      client: true,
+      client: {
+        select: {
+          id: true,
+          name: true,
+          // Não incluir email, phone, stripeId - dados sensíveis
+        },
+      },
       service: true,
     },
     orderBy: {
@@ -47,10 +54,26 @@ const AdminPage = async () => {
 
   const bookings = await db.booking.findMany({
     include: {
-      client: true,
+      client: {
+        select: {
+          id: true,
+          name: true,
+          // Não incluir email, phone, stripeId - dados sensíveis
+        },
+      },
       service: true,
       professional: true,
-      payment: true,
+      payment: {
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          type: true,
+          createdAt: true,
+          updatedAt: true,
+          // Não incluir stripeId - dado sensível
+        },
+      },
     },
     orderBy: {
       date: "desc",
@@ -64,6 +87,8 @@ const AdminPage = async () => {
     },
   })
 
+  const stats = await getAdminStats()
+
   return (
     <AdminDashboard
       services={services.map((s) => ({
@@ -74,6 +99,8 @@ const AdminPage = async () => {
       subscriptions={JSON.parse(JSON.stringify(subscriptions))}
       bookings={JSON.parse(JSON.stringify(bookings))}
       barbershop={barbershop ? JSON.parse(JSON.stringify(barbershop)) : null}
+      monthlyStats={stats.monthly}
+      yearlyStats={stats.yearly}
     />
   )
 }

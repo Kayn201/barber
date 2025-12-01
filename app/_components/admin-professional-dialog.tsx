@@ -13,7 +13,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select"
-import { Checkbox } from "./ui/checkbox"
 import { createProfessional } from "../_actions/admin/create-professional"
 import { updateProfessional } from "../_actions/admin/update-professional"
 import { toast } from "sonner"
@@ -39,6 +38,7 @@ interface AdminProfessionalDialogProps {
   onOpenChange: (open: boolean) => void
   professional?: any | null
   services: any[]
+  barbershop?: any | null
   onSuccess?: () => void
 }
 
@@ -64,6 +64,7 @@ const AdminProfessionalDialog = ({
   onOpenChange,
   professional,
   services,
+  barbershop,
   onSuccess,
 }: AdminProfessionalDialogProps) => {
   const [formData, setFormData] = useState<Professional>({
@@ -79,6 +80,8 @@ const AdminProfessionalDialog = ({
     })),
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [imagePreview, setImagePreview] = useState<string>("")
+  const [isUploading, setIsUploading] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -116,22 +119,78 @@ const AdminProfessionalDialog = ({
                   isAvailable: false,
                 })),
         })
+        setImagePreview(professional.imageUrl || "")
       } else {
+        // Novo profissional: usar horários da empresa como padrão
+        const defaultSchedule = barbershop?.businessHours?.length > 0
+          ? DAYS_OF_WEEK.map((day) => {
+              const businessDay = barbershop.businessHours.find(
+                (h: any) => h.dayOfWeek === day.value
+              )
+              return businessDay
+                ? {
+                    dayOfWeek: day.value,
+                    startTime: businessDay.startTime,
+                    endTime: businessDay.endTime,
+                    isAvailable: businessDay.isAvailable,
+                  }
+                : {
+                    dayOfWeek: day.value,
+                    startTime: "08:00",
+                    endTime: "18:00",
+                    isAvailable: false,
+                  }
+            })
+          : DAYS_OF_WEEK.map((day) => ({
+              dayOfWeek: day.value,
+              startTime: "08:00",
+              endTime: "18:00",
+              isAvailable: false,
+            }))
+        
         setFormData({
           name: "",
           profession: "",
           imageUrl: "",
           serviceIds: [],
-          weeklySchedule: DAYS_OF_WEEK.map((day) => ({
-            dayOfWeek: day.value,
-            startTime: "08:00",
-            endTime: "18:00",
-            isAvailable: false,
-          })),
+          weeklySchedule: defaultSchedule,
         })
+        setImagePreview("")
       }
     }
   }, [professional, open])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("imageType", "professional")
+
+      const response = await fetch("/api/upload-image", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setFormData((prev) => ({ ...prev, imageUrl: data.imageUrl }))
+        setImagePreview(data.imageUrl)
+        toast.success("Imagem carregada e otimizada com sucesso!")
+      } else {
+        toast.error(data.error || "Erro ao carregar imagem")
+      }
+    } catch (error) {
+      console.error("Erro ao fazer upload:", error)
+      toast.error("Erro ao fazer upload da imagem")
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -168,6 +227,17 @@ const AdminProfessionalDialog = ({
   }
 
   const updateSchedule = (dayOfWeek: number, field: string, value: any) => {
+    // Se tentando ativar um dia, verificar se a empresa está aberta nesse dia
+    if (field === "isAvailable" && value === true && barbershop?.businessHours) {
+      const businessDay = barbershop.businessHours.find(
+        (h: any) => h.dayOfWeek === dayOfWeek
+      )
+      if (!businessDay || !businessDay.isAvailable) {
+        toast.error("Verifique o Horário de Funcionamento definido na aba Perfil Empresarial")
+        return
+      }
+    }
+    
     setFormData({
       ...formData,
       weeklySchedule: formData.weeklySchedule.map((schedule) =>
@@ -193,9 +263,20 @@ const AdminProfessionalDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {professional?.id ? "Editar Profissional" : "Novo Profissional"}
-          </DialogTitle>
+          <div className="flex items-start gap-4">
+            {imagePreview && (
+              <div className="flex-shrink-0 mt-1">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="w-16 h-16 object-cover rounded-full border border-gray-800"
+                />
+              </div>
+            )}
+            <DialogTitle className="flex-1">
+              {professional?.id ? "Editar Profissional" : "Novo Profissional"}
+            </DialogTitle>
+          </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -230,18 +311,36 @@ const AdminProfessionalDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">
-              URL da Foto * <span className="text-gray-400 text-xs">(Obrigatório)</span>
-            </Label>
-            <Input
-              id="imageUrl"
-              value={formData.imageUrl}
-              onChange={(e) =>
-                setFormData({ ...formData, imageUrl: e.target.value })
-              }
-              placeholder="https://exemplo.com/foto.jpg"
-              required
-            />
+            <Label htmlFor="image">Imagem do Profissional</Label>
+            <div className="flex gap-2">
+              <Input
+                id="image"
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+                className="hidden"
+              />
+              <Input
+                type="text"
+                value={imagePreview ? "Imagem selecionada" : "Nenhuma imagem selecionada"}
+                readOnly
+                className="bg-background flex-1 cursor-default"
+                placeholder="Selecione uma imagem"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById("image")?.click()}
+                disabled={isUploading}
+                className="flex-shrink-0"
+              >
+                {isUploading ? "Carregando..." : "Escolher Arquivo"}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              O sistema redimensiona automaticamente imagens grandes (como 1080x1080) para o tamanho ideal. A imagem será exibida em formato circular. Formatos aceitos: JPG, PNG, WEBP, GIF. Tamanho máximo: 10MB.
+            </p>
           </div>
 
           <div className="space-y-2">
@@ -253,18 +352,18 @@ const AdminProfessionalDialog = ({
                 </p>
               ) : (
                 activeServices.map((service) => (
-                  <div key={service.id} className="flex items-center space-x-2">
-                    <Checkbox
+                  <div key={service.id} className="flex items-center justify-between gap-2">
+                    <Label
+                      htmlFor={`service-${service.id}`}
+                      className="text-sm font-normal cursor-pointer flex-1"
+                    >
+                      {service.name}
+                    </Label>
+                    <Switch
                       id={`service-${service.id}`}
                       checked={formData.serviceIds.includes(service.id)}
                       onCheckedChange={() => toggleService(service.id)}
                     />
-                    <Label
-                      htmlFor={`service-${service.id}`}
-                      className="text-sm font-normal cursor-pointer"
-                    >
-                      {service.name}
-                    </Label>
                   </div>
                 ))
               )}

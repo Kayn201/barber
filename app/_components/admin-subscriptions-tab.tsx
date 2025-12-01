@@ -98,7 +98,7 @@ const AdminSubscriptionsTab = ({ subscriptions: initialSubscriptions }: AdminSub
                   <p className="text-sm">
                     <span className="font-semibold">Cliente:</span> {subscription.client.name}
                   </p>
-                  <p className="text-sm text-gray-400">{subscription.client.email}</p>
+                  {/* Email removido por segurança - não é enviado do servidor */}
                   <div className="flex items-center gap-4 text-sm">
                     <div>
                       <span className="font-semibold">Início:</span>{" "}

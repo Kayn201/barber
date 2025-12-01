@@ -60,6 +60,8 @@ const AdminServiceDialog = ({
     maxReschedules: 1,
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [imagePreview, setImagePreview] = useState<string>("")
+  const [isUploading, setIsUploading] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -77,6 +79,7 @@ const AdminServiceDialog = ({
           cancellationTimeMinutes: service.cancellationTimeMinutes ?? 1440,
           maxReschedules: service.maxReschedules ?? 1,
         })
+        setImagePreview(service.imageUrl || "")
       } else {
         setFormData({
           name: "",
@@ -90,9 +93,42 @@ const AdminServiceDialog = ({
           cancellationTimeMinutes: 1440,
           maxReschedules: 1,
         })
+        setImagePreview("")
       }
     }
   }, [service, open])
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      formData.append("imageType", "service")
+
+      const response = await fetch("/api/upload-image", {
+        method: "POST",
+        body: formData,
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        setFormData((prev) => ({ ...prev, imageUrl: data.imageUrl }))
+        setImagePreview(data.imageUrl)
+        toast.success("Imagem carregada e otimizada com sucesso!")
+      } else {
+        toast.error(data.error || "Erro ao carregar imagem")
+      }
+    } catch (error) {
+      console.error("Erro ao fazer upload:", error)
+      toast.error("Erro ao fazer upload da imagem")
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -136,9 +172,20 @@ const AdminServiceDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            {service?.id ? "Editar Serviço" : "Novo Serviço"}
-          </DialogTitle>
+          <div className="flex items-start gap-4">
+            {imagePreview && (
+              <div className="flex-shrink-0 mt-1">
+                <img
+                  src={imagePreview}
+                  alt="Preview"
+                  className="w-16 h-16 object-cover rounded-full border border-gray-800"
+                />
+              </div>
+            )}
+            <DialogTitle className="flex-1">
+              {service?.id ? "Editar Serviço" : "Novo Serviço"}
+            </DialogTitle>
+          </div>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -168,15 +215,36 @@ const AdminServiceDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="imageUrl">URL da Imagem (opcional)</Label>
-            <Input
-              id="imageUrl"
-              type="url"
-              value={formData.imageUrl}
-              onChange={(e) =>
-                setFormData({ ...formData, imageUrl: e.target.value })
-              }
-            />
+            <Label htmlFor="image">Imagem do Serviço</Label>
+            <div className="flex gap-2">
+              <Input
+                id="image"
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+                className="hidden"
+              />
+              <Input
+                type="text"
+                value={imagePreview ? "Imagem selecionada" : "Nenhuma imagem selecionada"}
+                readOnly
+                className="bg-background flex-1 cursor-default"
+                placeholder="Selecione uma imagem"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById("image")?.click()}
+                disabled={isUploading}
+                className="flex-shrink-0"
+              >
+                {isUploading ? "Carregando..." : "Escolher Arquivo"}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              O sistema redimensiona automaticamente imagens grandes (como 1080x1080) para o tamanho ideal. Formatos aceitos: JPG, PNG, WEBP, GIF. Tamanho máximo: 10MB.
+            </p>
           </div>
 
           <div className="space-y-2">

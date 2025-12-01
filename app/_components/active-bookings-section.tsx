@@ -42,7 +42,7 @@ const ActiveBookingsSection = ({
     : `Ver mais ${others.length} agendamento${others.length > 1 ? "s" : ""}`
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3 md:space-y-4">
       <div>
         <ActiveBookingCard
           booking={primary}
@@ -61,7 +61,7 @@ const ActiveBookingsSection = ({
       {others.length > 0 && (
         <Button
           variant="ghost"
-          className="w-full text-sm font-semibold text-[#EE8530]"
+          className="w-full text-xs md:text-sm font-semibold text-[#EE8530] h-8 md:h-10"
           onClick={() => setExpanded((prev) => !prev)}
         >
           {toggleText}

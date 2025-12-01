@@ -217,6 +217,8 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
       })
       if (result.success) {
         toast.success("Reembolso solicitado com sucesso!")
+        // Disparar evento para atualizar stats na aba "Visão geral"
+        window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "refunded" } }))
         setIsSheetOpen(false)
         window.location.reload()
       } else {
@@ -250,6 +252,8 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
       })
       if (result.success) {
         toast.success("Agendamento reagendado com sucesso!")
+        // Disparar evento para atualizar stats na aba "Visão geral"
+        window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "rescheduled" } }))
         setRescheduleDialogOpen(false)
         setIsSheetOpen(false)
         window.location.reload()
@@ -284,7 +288,7 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
     <Sheet open={isSheetOpen} onOpenChange={handleSheetOpenChange}>
       <SheetTrigger className="block w-full text-left">
         <Card
-          className={`w-full rounded-[22px] border relative overflow-hidden ${
+          className={`w-full rounded-xl md:rounded-[22px] border relative overflow-hidden ${
             isConfirmed
               ? "bg-[#1A1B1F] border-gray-800"
               : "bg-[#1A1B1F] border-gray-800"
@@ -293,14 +297,14 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
           {!isConfirmed && (
             <div className="absolute inset-0 bg-gray-900/70 z-10 pointer-events-none" />
           )}
-          <CardContent className="px-6 py-5 relative z-20">
-            <div className="flex items-stretch gap-6">
+          <CardContent className="px-4 py-3 md:px-6 md:py-5 relative z-20">
+            <div className="flex items-stretch gap-3 md:gap-6">
               {/* Lado esquerdo */}
-              <div className="flex-1 space-y-3">
+              <div className="flex-1 space-y-2 md:space-y-3">
                 {/* Badge Confirmado/Finalizado */}
                 <div>
                   <span
-                    className={`inline-block rounded-full px-4 py-1.5 text-xs font-semibold text-white ${
+                    className={`inline-block rounded-full px-3 md:px-4 py-1 md:py-1.5 text-[10px] md:text-xs font-semibold text-white ${
                       isConfirmed ? 'bg-[#EE8530]' : 'bg-gray-600'
                     }`}
                   >
@@ -309,13 +313,13 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
                 </div>
 
                 {/* Nome do serviço em bold */}
-                <h3 className={`text-lg font-bold leading-tight ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
+                <h3 className={`text-base md:text-lg font-bold leading-tight ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
                   {booking.service.name}
                 </h3>
 
                 {/* Avatar e nome do profissional */}
-                <div className="flex items-center gap-2">
-                  <div className="relative h-6 w-6 overflow-hidden rounded-full">
+                <div className="flex items-center gap-1.5 md:gap-2">
+                  <div className="relative h-5 w-5 md:h-6 md:w-6 overflow-hidden rounded-full">
                     <Image
                       src={booking.professional.imageUrl}
                       alt={booking.professional.name}
@@ -323,7 +327,7 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
                       className="object-cover"
                     />
                   </div>
-                  <p className={`text-sm ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
+                  <p className={`text-xs md:text-sm ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
                     {booking.professional.name}
                   </p>
                 </div>
@@ -333,15 +337,15 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
               <div className={`self-stretch w-px rounded ${isConfirmed ? 'bg-[#2F2F36]' : 'bg-[#2F2F36]'}`} />
 
               {/* Lado direito: Data e Hora centralizados verticalmente */}
-              <div className="w-[150px] flex flex-col items-center text-center gap-1">
-                <div className="h-full flex flex-col justify-center gap-1">
-                  <p className={`text-sm font-semibold capitalize ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
+              <div className="w-[110px] md:w-[150px] flex flex-col items-center text-center gap-0.5 md:gap-1">
+                <div className="h-full flex flex-col justify-center gap-0.5 md:gap-1">
+                  <p className={`text-xs md:text-sm font-semibold capitalize ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
                     {format(booking.date, "MMMM", { locale: ptBR })}
                   </p>
-                  <p className={`text-4xl font-bold leading-none ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
+                  <p className={`text-3xl md:text-4xl font-bold leading-none ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
                     {format(booking.date, "dd", { locale: ptBR })}
                   </p>
-                  <p className={`text-xs tracking-wide ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
+                  <p className={`text-[10px] md:text-xs tracking-wide ${isConfirmed ? 'text-white' : 'text-gray-400'}`}>
                     {format(startTime, "HH:mm", { locale: ptBR })} - {format(endTime, "HH:mm", { locale: ptBR })}
                   </p>
                 </div>
@@ -354,35 +358,68 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
       <SheetContent className="w-[85%] max-h-[100vh] flex flex-col">
         <div className="flex-1 overflow-y-auto pb-4">
           <SheetHeader>
-            <SheetTitle className="text-left">Informações da Reserva</SheetTitle>
+            <SheetTitle className="text-left text-base md:text-lg">Informações da Reserva</SheetTitle>
           </SheetHeader>
 
         {barbershop && (
-          <div className="relative mt-6 flex h-[180px] w-full items-end">
+          <div
+            onClick={() => {
+              const address = barbershop.address
+              if (!address) return
+
+              // Tentar abrir Waze primeiro (deep link)
+              const wazeUrl = `waze://?q=${encodeURIComponent(address)}`
+              const googleMapsUrl = `https://maps.google.com/?q=${encodeURIComponent(address)}`
+              
+              // Detectar se o Waze foi aberto (a página perde o foco)
+              let wazeOpened = false
+              const handleBlur = () => {
+                wazeOpened = true
+                window.removeEventListener('blur', handleBlur)
+              }
+              window.addEventListener('blur', handleBlur)
+              
+              // Tentar abrir Waze via iframe (mais confiável em mobile)
+              const iframe = document.createElement('iframe')
+              iframe.style.display = 'none'
+              iframe.src = wazeUrl
+              document.body.appendChild(iframe)
+              
+              // Se Waze não abrir em 1 segundo, abrir Google Maps
+              setTimeout(() => {
+                if (!wazeOpened) {
+                  window.open(googleMapsUrl, '_blank', 'noopener,noreferrer')
+                }
+                document.body.removeChild(iframe)
+                window.removeEventListener('blur', handleBlur)
+              }, 1000)
+            }}
+            className="relative mt-4 md:mt-6 flex h-[120px] md:h-[180px] w-full items-end cursor-pointer group"
+          >
             <Image
-              alt={`Mapa da barbearia ${barbershop.name}`}
+              alt={`Mapa do estabelecimento ${barbershop.name}`}
               src="/map.png"
               fill
-              className="rounded-xl object-cover"
+              className="rounded-xl object-cover transition-opacity group-hover:opacity-90"
             />
 
-            <Card className="z-50 mx-5 mb-3 w-full rounded-xl">
-              <CardContent className="flex items-center gap-3 px-5 py-3">
-                <Avatar>
+            <Card className="z-50 mx-3 md:mx-5 mb-2 md:mb-3 w-full rounded-xl pointer-events-none">
+              <CardContent className="flex items-center gap-2 md:gap-3 px-3 md:px-5 py-2 md:py-3">
+                <Avatar className="h-8 w-8 md:h-10 md:w-10 flex-shrink-0">
                   <AvatarImage src={barbershop.imageUrl} />
                 </Avatar>
-                <div>
-                  <h3 className="font-bold">{barbershop.name}</h3>
-                  <p className="text-xs">{barbershop.address}</p>
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-bold text-sm md:text-base truncate">{barbershop.name}</h3>
+                  <p className="text-[10px] md:text-xs text-gray-400 line-clamp-2 break-words">{barbershop.address}</p>
                 </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        <div className="mt-6">
+        <div className="mt-4 md:mt-6">
           <Badge
-            className="w-fit"
+            className="w-fit text-[10px] md:text-xs px-2 md:px-3 py-0.5 md:py-1"
             variant={isConfirmed ? "default" : "secondary"}
           >
             {isConfirmed ? "Confirmado" : "Finalizado"}
@@ -390,7 +427,7 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
 
           {barbershop && (
             <>
-              <div className="mb-3 mt-6">
+              <div className="mb-3 mt-4 md:mt-6">
                 <BookingSummary
                   barbershop={barbershop}
                   service={booking.service}
@@ -398,7 +435,7 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
                 />
               </div>
 
-              <div className="space-y-3">
+              <div className="space-y-2 md:space-y-3">
                 {barbershop.phones.map((phone, index) => (
                   <PhoneItem key={index} phone={phone} />
                 ))}
@@ -536,16 +573,16 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
                         {isRefunding ? "Processando..." : "Pedir Reembolso"}
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="w-[90%]">
-                      <DialogHeader>
-                        <DialogTitle>Você deseja solicitar reembolso?</DialogTitle>
-                        <DialogDescription>
+                    <DialogContent className="w-[90%] max-w-md">
+                      <DialogHeader className="space-y-2 md:space-y-3">
+                        <DialogTitle className="text-base md:text-lg">Você deseja solicitar reembolso?</DialogTitle>
+                        <DialogDescription className="text-xs md:text-sm">
                           Ao solicitar reembolso, você receberá o valor pago de volta e o agendamento será cancelado. Esta ação é irreversível.
                         </DialogDescription>
                       </DialogHeader>
-                      <DialogFooter className="flex flex-row gap-3">
+                      <DialogFooter className="flex flex-col sm:flex-row gap-2 md:gap-3 mt-4 md:mt-6">
                         <DialogClose asChild>
-                          <Button variant="secondary" className="w-full">
+                          <Button variant="secondary" className="w-full text-xs md:text-sm h-9 md:h-10">
                             Cancelar
                           </Button>
                         </DialogClose>
@@ -554,7 +591,7 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
                             variant="destructive"
                             onClick={handleRefund}
                             disabled={isRefunding}
-                            className="w-full"
+                            className="w-full text-xs md:text-sm h-9 md:h-10"
                           >
                             {isRefunding ? "Processando..." : "Confirmar Reembolso"}
                           </Button>

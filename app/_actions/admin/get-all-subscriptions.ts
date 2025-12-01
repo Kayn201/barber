@@ -3,9 +3,15 @@
 import { db } from "../../_lib/prisma"
 
 export const getAllSubscriptions = async () => {
-  return db.subscription.findMany({
+  const subscriptions = await db.subscription.findMany({
     include: {
-      client: true,
+      client: {
+        select: {
+          id: true,
+          name: true,
+          // Não incluir email, phone, stripeId - dados sensíveis
+        },
+      },
       service: true,
     },
     orderBy: {
@@ -13,5 +19,15 @@ export const getAllSubscriptions = async () => {
     },
     take: 50,
   })
+
+  // Remover dados sensíveis antes de retornar
+  return subscriptions.map((subscription) => ({
+    ...subscription,
+    client: subscription.client ? {
+      id: subscription.client.id,
+      name: subscription.client.name,
+      // Email, phone e stripeId removidos
+    } : null,
+  }))
 }
 
