@@ -612,7 +612,8 @@ export async function POST(request: NextRequest) {
           : invoice.subscription.id
 
       // Buscar assinatura no Stripe para ver o status atual
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscription = stripeSubscriptionResponse as any
       
       const dbSubscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },
@@ -685,7 +686,8 @@ export async function POST(request: NextRequest) {
           : invoice.subscription.id
 
       // Buscar assinatura no Stripe para verificar status atual
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscription = stripeSubscriptionResponse as any
 
       const dbSubscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },

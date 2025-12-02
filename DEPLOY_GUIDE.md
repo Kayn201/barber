@@ -95,7 +95,7 @@ DATABASE_URL="postgresql://usuario:senha@host:porta/database?sslmode=require"
 NEXTAUTH_URL="https://popupsystem.com.br"
 NEXT_PUBLIC_APP_URL="https://popupsystem.com.br"
 NEXT_PUBLIC_BASE_URL="https://popupsystem.com.br"
-NEXTAUTH_SECRET="use-o-mesmo-secret-do-seu-env-local-ou-gere-novo"
+NEXTAUTH_SECRET="vAG8O44PJTb4tAMIKP6Hf6XFMklzK0FmxdmKGgp61n8="
 
 # Stripe
 STRIPE_SECRET_KEY="sk_live_..."

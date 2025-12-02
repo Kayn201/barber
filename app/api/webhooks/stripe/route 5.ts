@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/app/_lib/prisma"
+import type Stripe from "stripe"
 
 async function getStripe() {
   const Stripe = (await import("stripe")).default
   return new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: "2024-11-20.acacia",
   })
 }
 
@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
   }
 
   const stripe = await getStripe()
-  const Stripe = (await import("stripe")).default
 
   let event: Stripe.Event
 
@@ -157,13 +156,14 @@ export async function POST(request: NextRequest) {
           : session.subscription.id
 
       // Buscar detalhes da assinatura no Stripe
-      const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const subscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
+      const subscription = subscriptionResponse as any
 
       // O metadata da subscription está em subscription.metadata, não em session.metadata
       const subscriptionMetadata = subscription.metadata || metadata
 
       if (subscriptionMetadata?.serviceId || metadata?.serviceId) {
-        const serviceId = subscriptionMetadata?.serviceId || metadata?.serviceId
+        const serviceId = (subscriptionMetadata?.serviceId || metadata?.serviceId) as string
         // Buscar userId se estiver no metadata ou pelo email
         const userId = subscriptionMetadata?.userId || metadata?.userId || await getUserIdByEmail(session.customer_details?.email)
         
@@ -272,7 +272,7 @@ export async function POST(request: NextRequest) {
 
   // Handle customer.subscription.updated - Atualizações de assinatura
   if (event.type === "customer.subscription.updated") {
-    const subscription = event.data.object as Stripe.Subscription
+    const subscription = event.data.object as any
 
     const dbSubscription = await db.subscription.findUnique({
       where: { stripeSubscriptionId: subscription.id },
@@ -293,7 +293,7 @@ export async function POST(request: NextRequest) {
 
   // Handle invoice.payment_succeeded - Pagamentos recorrentes de assinatura
   if (event.type === "invoice.payment_succeeded") {
-    const invoice = event.data.object as Stripe.Invoice
+    const invoice = event.data.object as any
 
     if (invoice.subscription) {
       const subscriptionId =
