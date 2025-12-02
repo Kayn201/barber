@@ -2,6 +2,7 @@ import { cookies } from "next/headers"
 import { db } from "@/app/_lib/prisma"
 import { redirect } from "next/navigation"
 import { NextRequest, NextResponse } from "next/server"
+import { getBaseUrl } from "@/app/_lib/get-base-url"
 
 export async function POST(request: NextRequest) {
   try {
@@ -97,7 +98,8 @@ export async function GET(request: NextRequest) {
   const clientId = searchParams.get("clientId")
 
   if (!clientId) {
-    return NextResponse.redirect(new URL("/", request.url))
+    const baseUrl = getBaseUrl()
+    return NextResponse.redirect(new URL("/", baseUrl))
   }
 
   try {
@@ -122,10 +124,12 @@ export async function GET(request: NextRequest) {
     }
 
     console.log("✅ Cookie salvo com sucesso - clientId:", clientId)
-    return NextResponse.redirect(new URL("/", request.url))
+    const baseUrl = getBaseUrl()
+    return NextResponse.redirect(new URL("/", baseUrl))
   } catch (error: any) {
     console.error("Erro ao salvar cookie:", error)
-    return NextResponse.redirect(new URL("/", request.url))
+    const baseUrl = getBaseUrl()
+    return NextResponse.redirect(new URL("/", baseUrl))
   }
 }
 

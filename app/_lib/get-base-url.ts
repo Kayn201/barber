@@ -7,7 +7,7 @@ export function getBaseUrl(): string {
   const isProduction = process.env.NODE_ENV === "production"
   
   // Prioridade: NEXT_PUBLIC_BASE_URL > NEXT_PUBLIC_APP_URL > NEXTAUTH_URL
-  const baseUrl =
+  let baseUrl =
     process.env.NEXT_PUBLIC_BASE_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXTAUTH_URL ||
@@ -22,10 +22,18 @@ export function getBaseUrl(): string {
     return "http://localhost:3000"
   }
   
-  // Em produção, garantir que não use localhost
-  if (isProduction && baseUrl.includes("localhost")) {
-    console.warn("⚠️ Aviso: URL contém localhost em produção, usando fallback")
-    return "https://popupsystem.com.br"
+  // Em produção, SEMPRE garantir que não use localhost
+  // Mesmo que as variáveis de ambiente tenham localhost, usar fallback
+  if (isProduction) {
+    if (baseUrl.includes("localhost") || baseUrl.includes("127.0.0.1")) {
+      console.warn("⚠️ Aviso: URL contém localhost em produção, usando fallback")
+      return "https://popupsystem.com.br"
+    }
+    // Garantir que está usando HTTPS em produção
+    if (!baseUrl.startsWith("https://")) {
+      console.warn("⚠️ Aviso: URL não usa HTTPS em produção, usando fallback")
+      return "https://popupsystem.com.br"
+    }
   }
   
   return baseUrl
