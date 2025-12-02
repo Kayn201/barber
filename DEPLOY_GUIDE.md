@@ -69,6 +69,14 @@ cd barbearia
 npm install
 ```
 
+**⚠️ IMPORTANTE - Versão do Prisma:**
+O projeto está configurado para usar **Prisma 6.19.0** (versão fixa, sem `^`). Isso garante que o servidor use a mesma versão que o desenvolvimento.
+
+Se você encontrar erros sobre Prisma 7 no servidor, certifique-se de:
+1. Deletar `node_modules` e `package-lock.json` (se necessário)
+2. Executar `npm install` novamente para instalar a versão correta
+3. Verificar a versão com: `npx prisma --version` (deve mostrar 6.19.0)
+
 ### 3.4 Configurar variáveis de ambiente
 ```bash
 nano .env
