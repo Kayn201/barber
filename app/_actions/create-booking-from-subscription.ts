@@ -77,7 +77,7 @@ export const createBookingFromSubscription = async (
     }
 
     // Criar booking sem pagamento (já está coberto pela assinatura)
-    await db.booking.create({
+    const booking = await db.booking.create({
       data: {
         serviceId: params.serviceId,
         date: params.date,
@@ -88,16 +88,20 @@ export const createBookingFromSubscription = async (
         // Não criar payment, pois já está coberto pela assinatura
       },
     })
+    
+    // Gerar wallet pass automaticamente (não bloquear se falhar)
+    try {
+      const { generateWalletPassForBooking } = await import("./generate-wallet-pass-for-booking")
+      await generateWalletPassForBooking(booking.id)
+    } catch (error) {
+      console.error("Erro ao gerar wallet pass automaticamente:", error)
+      // Não bloquear criação do booking se falhar
+    }
 
     revalidatePath("/barbershops/[id]")
     revalidatePath("/bookings")
     revalidatePath("/")
     revalidatePath("/admin")
-
-    // Disparar evento para atualizar stats
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("booking-updated", { detail: { type: "created" } }))
-    }
 
     return { success: true }
   } catch (error: any) {

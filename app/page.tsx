@@ -8,7 +8,7 @@ import { cookies } from "next/headers"
 import ProfessionalItem from "./_components/professional-item"
 import ActiveBookingsSection from "./_components/active-bookings-section"
 import RatingCheck from "./_components/rating-check"
-import GenerateWalletButton from "./_components/generate-wallet-button"
+import AddToWalletButton from "./_components/add-to-wallet-button"
 import BookingPolling from "./_components/booking-polling"
 import Link from "next/link"
 import { getServerSession } from "next-auth"
@@ -302,8 +302,9 @@ const Home = async ({ searchParams }: HomeProps) => {
             <h2 className="text-[10px] md:text-xs font-bold uppercase text-gray-400">
               AGENDAMENTOS
             </h2>
+            {/* Botão Wallet - somente iPhone, somente se tiver agendamento confirmado */}
             {upcomingBookings.length > 0 && upcomingBookings[0].status === "confirmed" && (
-              <GenerateWalletButton
+              <AddToWalletButton
                 bookingId={upcomingBookings[0].id}
                 hasWalletPass={!!upcomingBookings[0].walletPassUrl}
               />

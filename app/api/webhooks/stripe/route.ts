@@ -334,6 +334,15 @@ export async function POST(request: NextRequest) {
               
               console.log("✅ Booking de assinatura criado:", booking.id, "userId:", booking.userId, "clientId:", booking.clientId)
               
+              // Gerar wallet pass automaticamente (não bloquear se falhar)
+              try {
+                const { generateWalletPassForBooking } = await import("@/app/_actions/generate-wallet-pass-for-booking")
+                await generateWalletPassForBooking(booking.id)
+              } catch (error) {
+                console.error("Erro ao gerar wallet pass automaticamente:", error)
+                // Não bloquear criação do booking se falhar
+              }
+              
               // Revalidar páginas para atualizar em tempo real
               revalidatePath("/")
               revalidatePath("/admin")
@@ -399,6 +408,15 @@ export async function POST(request: NextRequest) {
                 paymentId: payment.id,
               },
             })
+            
+            // Gerar wallet pass automaticamente (não bloquear se falhar)
+            try {
+              const { generateWalletPassForBooking } = await import("@/app/_actions/generate-wallet-pass-for-booking")
+              await generateWalletPassForBooking(booking.id)
+            } catch (error) {
+              console.error("Erro ao gerar wallet pass automaticamente:", error)
+              // Não bloquear criação do booking se falhar
+            }
             
             console.log("=".repeat(50))
             console.log("✅ BOOKING CRIADO COM SUCESSO!")
@@ -756,7 +774,7 @@ export async function POST(request: NextRequest) {
               serviceId: dbSubscription.serviceId,
             })
           } else {
-            await db.booking.create({
+            const booking = await db.booking.create({
               data: {
                 userId: userId || undefined,
                 clientId: dbSubscription.clientId,
@@ -768,6 +786,15 @@ export async function POST(request: NextRequest) {
             })
             
             console.log("✅ Booking criado para renovação de assinatura")
+            
+            // Gerar wallet pass automaticamente (não bloquear se falhar)
+            try {
+              const { generateWalletPassForBooking } = await import("@/app/_actions/generate-wallet-pass-for-booking")
+              await generateWalletPassForBooking(booking.id)
+            } catch (error) {
+              console.error("Erro ao gerar wallet pass automaticamente:", error)
+              // Não bloquear criação do booking se falhar
+            }
           }
         }
         

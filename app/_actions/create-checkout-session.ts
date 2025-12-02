@@ -3,6 +3,7 @@
 import { db } from "../_lib/prisma"
 import { getServerSession } from "next-auth"
 import { authOptions } from "../_lib/auth"
+import { getBaseUrl } from "../_lib/get-base-url"
 
 interface CreateCheckoutSessionParams {
   professionalId: string
@@ -114,14 +115,8 @@ export const createCheckoutSession = async (
     //   paymentMethodTypes.push("pix")
     // }
 
-    // Determinar URL base - usar localhost em desenvolvimento/teste
-    const isDevelopment = process.env.NODE_ENV === "development" || 
-                         process.env.NEXT_PUBLIC_APP_URL?.includes("localhost") ||
-                         process.env.USE_LOCALHOST_REDIRECT === "true"
-    
-    const baseUrl = isDevelopment 
-      ? "http://localhost:3000"
-      : (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000")
+    // Determinar URL base - usar URL de produção
+    const baseUrl = getBaseUrl()
 
     // Configurar base do checkout com tradução PT-BR
     const baseConfig: any = {

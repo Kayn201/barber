@@ -362,6 +362,15 @@ export async function processCheckoutSession({ sessionId }: ProcessCheckoutSessi
                 })
 
                 console.log("✅ Booking criado com sucesso:", booking.id)
+                
+                // Gerar wallet pass automaticamente (não bloquear se falhar)
+                try {
+                  const { generateWalletPassForBooking } = await import("./generate-wallet-pass-for-booking")
+                  await generateWalletPassForBooking(booking.id)
+                } catch (error) {
+                  console.error("Erro ao gerar wallet pass automaticamente:", error)
+                  // Não bloquear criação do booking se falhar
+                }
 
                 revalidatePath("/")
                 revalidatePath("/admin")
@@ -435,6 +444,15 @@ export async function processCheckoutSession({ sessionId }: ProcessCheckoutSessi
                 paymentId: payment.id,
               },
             })
+            
+            // Gerar wallet pass automaticamente (não bloquear se falhar)
+            try {
+              const { generateWalletPassForBooking } = await import("./generate-wallet-pass-for-booking")
+              await generateWalletPassForBooking(booking.id)
+            } catch (error) {
+              console.error("Erro ao gerar wallet pass automaticamente:", error)
+              // Não bloquear criação do booking se falhar
+            }
 
             revalidatePath("/")
             revalidatePath("/admin")

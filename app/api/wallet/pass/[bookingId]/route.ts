@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/app/_lib/prisma"
 import { generateWalletPass } from "@/app/_lib/wallet-pass-generator"
+import { getBaseUrl } from "@/app/_lib/get-base-url"
 import crypto from "crypto"
 import path from "path"
 
@@ -47,13 +48,20 @@ export async function GET(
     // Gerar authentication token
     const authenticationToken = crypto.randomBytes(16).toString("hex")
 
-    // URL base do web service
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+    // URL base do web service - usar URL de produção
+    const baseUrl = getBaseUrl()
     const webServiceURL = `${baseUrl}/api/wallet/v1`
 
-    // Gerar o passe - usar caminho relativo à raiz do projeto
-    const certificatesPath = process.env.WALLET_CERTIFICATES_PATH || 
-      path.join(process.cwd(), "wallet", "certificates")
+    // Gerar o passe - usar caminho de certificados
+    // Priorizar WALLET_CERTIFICATES_PATH se for um caminho absoluto válido
+    let certificatesPath: string
+    if (process.env.WALLET_CERTIFICATES_PATH && path.isAbsolute(process.env.WALLET_CERTIFICATES_PATH)) {
+      // Usar caminho absoluto se fornecido
+      certificatesPath = process.env.WALLET_CERTIFICATES_PATH
+    } else {
+      // Fallback: caminho relativo ao projeto
+      certificatesPath = path.join(process.cwd(), "wallet", "certificates")
+    }
 
     const passBuffer = await generateWalletPass(
       {

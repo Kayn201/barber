@@ -6,17 +6,12 @@ import GoogleProvider from "next-auth/providers/google"
 import AppleProvider from "next-auth/providers/apple"
 import CredentialsProvider from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
+import { getBaseUrl } from "./get-base-url"
 
-// Em desenvolvimento, SEMPRE usar localhost, ignorando NEXTAUTH_URL se for de produção
-if (process.env.NODE_ENV === "development") {
-  if (process.env.NEXTAUTH_URL && !process.env.NEXTAUTH_URL.includes("localhost")) {
-    // Se NEXTAUTH_URL está definido com domínio de produção, ignorar em desenvolvimento
-    delete process.env.NEXTAUTH_URL
-  }
-  // Forçar localhost em desenvolvimento
-  if (!process.env.NEXTAUTH_URL) {
-    process.env.NEXTAUTH_URL = "http://localhost:3000"
-  }
+// Usar URL de produção
+const baseUrl = getBaseUrl()
+if (!process.env.NEXTAUTH_URL) {
+  process.env.NEXTAUTH_URL = baseUrl
 }
 
 export const authOptions: AuthOptions = {
@@ -103,41 +98,23 @@ export const authOptions: AuthOptions = {
   },
   callbacks: {
     async redirect({ url, baseUrl }) {
-      // Sempre usar localhost em desenvolvimento, mesmo que baseUrl seja de produção
-      const isDevelopment = process.env.NODE_ENV === "development"
-      const localhostUrl = "http://localhost:3000"
+      // Usar URL de produção
+      const productionUrl = getBaseUrl()
       
-      if (isDevelopment) {
-        // Se a URL é relativa, adicionar localhost
-        if (url.startsWith("/")) {
-          return `${localhostUrl}${url}`
-        }
-        // Se a URL já é localhost, manter
-        if (url.startsWith("http://localhost") || url.startsWith("https://localhost")) {
+      // Se a URL é relativa, adicionar URL de produção
+      if (url.startsWith("/")) {
+        return `${productionUrl}${url}`
+      }
+      // Se a URL já é do mesmo domínio, manter
+      try {
+        const urlObj = new URL(url)
+        if (urlObj.origin === productionUrl || urlObj.origin === baseUrl) {
           return url
         }
-        // Se a URL contém domínio de produção, substituir por localhost
-        if (url.includes("popupsystem.com.br") || url.includes("seu-dominio.com") || url.includes("://")) {
-          // Extrair apenas o path da URL e adicionar localhost
-          try {
-            const urlObj = new URL(url)
-            return `${localhostUrl}${urlObj.pathname}${urlObj.search}${urlObj.hash}`
-          } catch {
-            // Se não conseguir fazer parse, substituir o domínio
-            return url.replace(/https?:\/\/[^/]+/, localhostUrl)
-          }
-        }
-        // Para outras URLs, usar localhost como base
-        return `${localhostUrl}${url.replace(baseUrl, "")}`
+      } catch {
+        // Se não conseguir fazer parse, usar URL de produção
       }
-      // Em produção, usar comportamento padrão
-      if (url.startsWith("/")) {
-        return `${baseUrl}${url}`
-      }
-      if (new URL(url).origin === baseUrl) {
-        return url
-      }
-      return baseUrl
+      return productionUrl
     },
     async session({ session, user, token }) {
       if (session.user) {
@@ -190,8 +167,5 @@ export const authOptions: AuthOptions = {
     maxAge: 365 * 24 * 60 * 60, // 1 ano - token JWT
   },
   secret: process.env.NEXTAUTH_SECRET || process.env.NEXT_AUTH_SECRET,
-  // Forçar localhost em desenvolvimento, ignorando NEXTAUTH_URL se estiver definido
-  ...(process.env.NODE_ENV === "development" ? {
-    url: "http://localhost:3000",
-  } : {}),
+  url: getBaseUrl(),
 }

@@ -1,25 +1,18 @@
-import { NextRequest, NextResponse } from "next/server"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/app/_lib/auth"
-import { db } from "@/app/_lib/prisma"
-import { generateWalletPass } from "@/app/_lib/wallet-pass-generator"
-import { getBaseUrl } from "@/app/_lib/get-base-url"
-import { revalidatePath } from "next/cache"
+"use server"
+
+import { db } from "../_lib/prisma"
+import { generateWalletPass } from "../_lib/wallet-pass-generator"
+import { getBaseUrl } from "../_lib/get-base-url"
 import crypto from "crypto"
 import path from "path"
+import fs from "fs"
 
-export async function POST(request: NextRequest) {
+/**
+ * Gera wallet pass automaticamente para um booking
+ * Esta função é chamada após criar um booking para gerar o pass automaticamente
+ */
+export async function generateWalletPassForBooking(bookingId: string) {
   try {
-    const session = await getServerSession(authOptions)
-    const { bookingId } = await request.json()
-
-    if (!bookingId) {
-      return NextResponse.json(
-        { error: "bookingId é obrigatório" },
-        { status: 400 }
-      )
-    }
-
     // Buscar booking com todas as relações
     const booking = await db.booking.findUnique({
       where: { id: bookingId },
@@ -31,34 +24,14 @@ export async function POST(request: NextRequest) {
     })
 
     if (!booking) {
-      return NextResponse.json(
-        { error: "Agendamento não encontrado" },
-        { status: 404 }
-      )
+      console.error("❌ Booking não encontrado para gerar wallet pass:", bookingId)
+      return { success: false, error: "Booking não encontrado" }
     }
 
-    // Verificar se o usuário tem permissão (é o dono do booking)
-    if (session?.user && (session.user as any).id) {
-      if (booking.userId !== (session.user as any).id) {
-        return NextResponse.json(
-          { error: "Não autorizado" },
-          { status: 403 }
-        )
-      }
-    } else if (booking.clientId) {
-      // Verificar se tem clientId no cookie
-      const clientId = request.cookies.get("clientId")?.value
-      if (booking.clientId !== clientId) {
-        return NextResponse.json(
-          { error: "Não autorizado" },
-          { status: 403 }
-        )
-      }
-    } else {
-      return NextResponse.json(
-        { error: "Não autorizado" },
-        { status: 403 }
-      )
+    // Se já tem walletPassUrl, não precisa gerar novamente
+    if (booking.walletPassUrl) {
+      console.log("ℹ️ Booking já tem wallet pass:", booking.walletPassUrl)
+      return { success: true, alreadyExists: true }
     }
 
     // Buscar barbershop
@@ -77,7 +50,6 @@ export async function POST(request: NextRequest) {
     const baseUrl = getBaseUrl()
     const webServiceURL = `${baseUrl}/api/wallet/v1`
     
-    console.log("💳 Gerando wallet pass:")
     console.log("   - baseUrl:", baseUrl)
     console.log("   - webServiceURL:", webServiceURL)
 
@@ -91,12 +63,22 @@ export async function POST(request: NextRequest) {
       // Fallback: caminho relativo ao projeto
       certificatesPath = path.join(process.cwd(), "wallet", "certificates")
     }
-    
-    console.log("💳 Gerando wallet pass:")
+
+    console.log("💳 Gerando wallet pass automaticamente para booking:", bookingId)
     console.log("   - Procurando certificados em:", certificatesPath)
     console.log("   - process.cwd():", process.cwd())
     console.log("   - WALLET_CERTIFICATES_PATH:", process.env.WALLET_CERTIFICATES_PATH || "não definido")
-
+    
+    // Verificar se o diretório existe
+    if (!fs.existsSync(certificatesPath)) {
+      console.error("❌ Diretório de certificados não encontrado:", certificatesPath)
+      return { success: false, error: "Diretório de certificados não encontrado. Configure os certificados do Wallet Pass." }
+    }
+    
+    // Verificar se há certificados no diretório
+    const filesInDir = fs.readdirSync(certificatesPath)
+    console.log("   - Arquivos encontrados no diretório:", filesInDir)
+    
     const passBuffer = await generateWalletPass(
       {
         booking: {
@@ -119,25 +101,14 @@ export async function POST(request: NextRequest) {
       where: { id: bookingId },
       data: { walletPassUrl: passUrl },
     })
-    
-    // Revalidar páginas para atualizar em tempo real
-    revalidatePath("/")
-    revalidatePath("/bookings")
-    revalidatePath("/admin")
 
-    // Retornar o arquivo .pkpass
-    return new NextResponse(new Uint8Array(passBuffer), {
-      headers: {
-        "Content-Type": "application/vnd.apple.pkpass",
-        "Content-Disposition": `attachment; filename="agendamento-${booking.id}.pkpass"`,
-      },
-    })
-  } catch (error) {
-    console.error("Erro ao gerar wallet pass:", error)
-    return NextResponse.json(
-      { error: "Erro ao gerar passe" },
-      { status: 500 }
-    )
+    console.log("✅ Wallet pass gerado e salvo automaticamente:", passUrl)
+
+    return { success: true, walletPassUrl: passUrl }
+  } catch (error: any) {
+    // Não bloquear criação do booking se falhar
+    console.error("❌ Erro ao gerar wallet pass automaticamente:", error.message)
+    return { success: false, error: error.message }
   }
 }
 

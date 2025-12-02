@@ -64,7 +64,7 @@ export const createBooking = async (params: CreateBookingParams) => {
     throw new Error("Este horário já está ocupado. Por favor, escolha outro horário.")
   }
 
-  await db.booking.create({
+  const booking = await db.booking.create({
     data: {
       serviceId: params.serviceId,
       date: params.date,
@@ -72,6 +72,16 @@ export const createBooking = async (params: CreateBookingParams) => {
       userId: (user.user as any).id,
     },
   })
+
+  // Gerar wallet pass automaticamente (não bloquear se falhar)
+  try {
+    const { generateWalletPassForBooking } = await import("./generate-wallet-pass-for-booking")
+    await generateWalletPassForBooking(booking.id)
+  } catch (error) {
+    console.error("Erro ao gerar wallet pass automaticamente:", error)
+    // Não bloquear criação do booking se falhar
+  }
+
   revalidatePath("/barbershops/[id]")
   revalidatePath("/bookings")
   revalidatePath("/")

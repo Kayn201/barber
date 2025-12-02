@@ -110,26 +110,14 @@ const AuthDialog = ({ open, onOpenChange, isSubscription = false }: AuthDialogPr
   }
 
   const handleGoogleSignIn = () => {
-    // Sempre usar localhost em desenvolvimento, mesmo que window.location seja diferente
-    const isDevelopment = process.env.NODE_ENV === "development" || 
-                         window.location.hostname === "localhost" ||
-                         window.location.hostname === "127.0.0.1"
-    
-    const callbackUrl = isDevelopment 
-      ? "http://localhost:3000" 
-      : window.location.origin
+    // Usar URL de produção
+    const callbackUrl = window.location.origin
     signIn("google", { callbackUrl })
   }
 
   const handleAppleSignIn = () => {
-    // Sempre usar localhost em desenvolvimento, mesmo que window.location seja diferente
-    const isDevelopment = process.env.NODE_ENV === "development" || 
-                         window.location.hostname === "localhost" ||
-                         window.location.hostname === "127.0.0.1"
-    
-    const callbackUrl = isDevelopment 
-      ? "http://localhost:3000" 
-      : window.location.origin
+    // Usar URL de produção
+    const callbackUrl = window.location.origin
     signIn("apple", { callbackUrl })
   }
 

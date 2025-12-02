@@ -209,9 +209,13 @@ export async function generateWalletPass(
 
   // Verificar se os certificados existem
   if (!certPath) {
-    throw new Error(
-      `Certificado P12 não encontrado. Procure por: ${possibleCertNames.join(", ")} em: ${certificatesPath}`
-    )
+    const errorMsg = `Certificado P12 não encontrado. Procure por: ${possibleCertNames.join(", ")} em: ${certificatesPath}`
+    console.error("❌", errorMsg)
+    console.error("   - Diretório existe:", fs.existsSync(certificatesPath))
+    if (fs.existsSync(certificatesPath)) {
+      console.error("   - Arquivos no diretório:", fs.readdirSync(certificatesPath))
+    }
+    throw new Error(errorMsg)
   }
 
   const wwdrExists = fs.existsSync(wwdrPath) || fs.existsSync(wwdrAltPath)
