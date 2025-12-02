@@ -55,14 +55,14 @@ export async function POST(request: NextRequest) {
           const metadata = await image.metadata()
           
           // Se for maior que o tamanho máximo, redimensionar
-          if (metadata.width && metadata.height && 
+          if (metadata.width && metadata.height &&
               (metadata.width > dimensions.width || metadata.height > dimensions.height)) {
-            processedBuffer = await image
+            processedBuffer = Buffer.from(await image
               .resize(dimensions.width, dimensions.height, {
                 fit: "cover",
                 position: "center",
               })
-              .toBuffer()
+              .toBuffer())
           }
         } catch {
           // GIF animado ou erro, usar original
@@ -76,13 +76,14 @@ export async function POST(request: NextRequest) {
         // Só redimensiona se a imagem for maior que o tamanho máximo
         if (metadata.width && metadata.height && 
             (metadata.width > dimensions.width || metadata.height > dimensions.height)) {
-          processedBuffer = await image
+          const resizedBuffer = await image
             .resize(dimensions.width, dimensions.height, {
               fit: "cover",
               position: "center",
             })
             .jpeg({ quality: 85 }) // Converter para JPEG com qualidade 85% para reduzir tamanho
             .toBuffer()
+          processedBuffer = Buffer.from(resizedBuffer)
           finalMimeType = "image/jpeg"
         }
       }

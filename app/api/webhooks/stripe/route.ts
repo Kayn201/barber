@@ -654,7 +654,8 @@ export async function POST(request: NextRequest) {
           : invoice.subscription.id
 
       // Buscar assinatura no Stripe para ver o status atual
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscription = stripeSubscriptionResponse as any
       
       const dbSubscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },
@@ -663,7 +664,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      if (dbSubscription) {
+      if (dbSubscription && stripeSubscription.current_period_start && stripeSubscription.current_period_end) {
         // Atualizar status da subscription baseado no status do Stripe
         // O Stripe pode mudar o status para: past_due, unpaid, ou canceled
         await db.subscription.update({
@@ -672,7 +673,7 @@ export async function POST(request: NextRequest) {
             status: stripeSubscription.status,
             currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
             currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end || false,
           },
         })
         
@@ -727,7 +728,8 @@ export async function POST(request: NextRequest) {
           : invoice.subscription.id
 
       // Buscar assinatura no Stripe para verificar status atual
-      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
+      const stripeSubscription = stripeSubscriptionResponse as any
 
       const dbSubscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },
@@ -737,7 +739,7 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      if (dbSubscription) {
+      if (dbSubscription && stripeSubscription.current_period_start && stripeSubscription.current_period_end) {
         // Atualizar status da assinatura (pode ter sido reativada após falha)
         await db.subscription.update({
           where: { id: dbSubscription.id },
@@ -745,7 +747,7 @@ export async function POST(request: NextRequest) {
             status: stripeSubscription.status, // Pode ser "active" se foi reativada
             currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
             currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end || false,
           },
         })
         

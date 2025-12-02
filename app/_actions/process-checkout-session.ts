@@ -120,6 +120,13 @@ export async function processCheckoutSession({ sessionId }: ProcessCheckoutSessi
           status: session.payment_status === "paid" ? "paid" : "pending",
           type: session.mode === "subscription" ? "subscription" : "one_time",
         },
+        include: { 
+          booking: {
+            include: {
+              client: true,
+            },
+          },
+        },
       })
     }
 

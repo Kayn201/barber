@@ -81,10 +81,12 @@ export async function processSubscriptionWebhook(subscriptionId: string) {
       }
     }
 
-    // Buscar payment associado
+    // Buscar payment associado através da subscription
     const payment = await db.payment.findFirst({
       where: {
-        clientId: client.id,
+        subscription: {
+          clientId: client.id,
+        },
         type: "subscription",
       },
       orderBy: {

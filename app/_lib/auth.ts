@@ -167,5 +167,4 @@ export const authOptions: AuthOptions = {
     maxAge: 365 * 24 * 60 * 60, // 1 ano - token JWT
   },
   secret: process.env.NEXTAUTH_SECRET || process.env.NEXT_AUTH_SECRET,
-  url: getBaseUrl(),
 }

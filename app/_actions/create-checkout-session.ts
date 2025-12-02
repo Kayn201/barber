@@ -73,9 +73,9 @@ export const createCheckoutSession = async (
       
       console.log("📋 Resultado da validação:")
       console.log("   - Cliente encontrado:", !!client)
-      console.log("   - Total de assinaturas encontradas:", client?.subscriptions.length || 0)
+      console.log("   - Total de assinaturas encontradas:", client?.subscriptions?.length || 0)
       
-      if (client?.subscriptions.length > 0) {
+      if (client?.subscriptions && client.subscriptions.length > 0) {
         client.subscriptions.forEach((sub, index) => {
           console.log(`   - Assinatura ${index + 1}:`)
           console.log("     * ID:", sub.id)
