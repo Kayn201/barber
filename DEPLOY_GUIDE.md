@@ -82,15 +82,19 @@ Se você encontrar erros sobre Prisma 7 no servidor, certifique-se de:
 nano .env
 ```
 
-**IMPORTANTE**: Copie todas as variáveis do seu `.env` local, especialmente:
+**⚠️ CRÍTICO**: As URLs devem ser de PRODUÇÃO, não localhost!
 
-**Variáveis obrigatórias no `.env`:**
+**IMPORTANTE**: Copie todas as variáveis do seu `.env` local, mas **ALTERE as URLs** para o domínio de produção:
+
+**Variáveis obrigatórias no `.env` (PRODUÇÃO):**
 ```env
 # Database (use a mesma DATABASE_URL do seu .env local)
-DATABASE_URL="postgresql://usuario:senha@host:porta/database"
+DATABASE_URL="postgresql://usuario:senha@host:porta/database?sslmode=require"
 
-# NextAuth (IMPORTANTE: altere a URL para o domínio de produção)
-NEXTAUTH_URL="https://seu-dominio.com.br"
+# NextAuth (OBRIGATÓRIO: URL de produção, NÃO localhost!)
+NEXTAUTH_URL="https://popupsystem.com.br"
+NEXT_PUBLIC_APP_URL="https://popupsystem.com.br"
+NEXT_PUBLIC_BASE_URL="https://popupsystem.com.br"
 NEXTAUTH_SECRET="use-o-mesmo-secret-do-seu-env-local-ou-gere-novo"
 
 # Stripe
@@ -125,14 +129,34 @@ npx prisma migrate deploy
 
 ## 🏗️ Passo 4: Build da Aplicação
 
+**⚠️ CRÍTICO**: Este passo é OBRIGATÓRIO. Sem o build, a aplicação não funcionará!
+
 ```bash
+cd /var/www/barber
 npm run build
 ```
+
+**Verificar se o build foi bem-sucedido:**
+```bash
+# Verificar se a pasta .next foi criada
+ls -la .next/
+
+# Verificar se o arquivo prerender-manifest.json existe
+ls -la .next/prerender-manifest.json
+```
+
+**Se o build der erro:**
+1. Verificar se todas as dependências estão instaladas: `npm install`
+2. Verificar se o Prisma Client foi gerado: `npx prisma generate`
+3. Verificar se o `.env` está correto
+4. Tentar novamente: `npm run build`
 
 ## ⚙️ Passo 5: Configurar PM2
 
 ### 5.1 Criar arquivo de configuração do PM2
 O arquivo `ecosystem.config.js` já está criado no projeto.
+
+**⚠️ IMPORTANTE**: Verifique se o caminho `cwd` no `ecosystem.config.js` corresponde ao diretório real do seu projeto no servidor. Se o diretório for diferente (ex: `/var/www/barber` em vez de `/var/www/barbearia`), atualize o arquivo antes de iniciar.
 
 ### 5.2 Iniciar aplicação com PM2
 ```bash
@@ -145,6 +169,57 @@ pm2 startup  # Seguir as instruções para iniciar no boot
 ```bash
 pm2 status
 pm2 logs barbearia
+```
+
+### 5.4 Troubleshooting PM2
+
+**Problema: Aplicação não inicia ou mostra 0b de memória**
+
+1. Verifique os logs de erro:
+```bash
+pm2 logs barbearia --err
+```
+
+2. Verifique se o diretório está correto:
+```bash
+# Verificar o diretório configurado
+cat ecosystem.config.js | grep cwd
+
+# Verificar se o diretório existe
+ls -la /var/www/barber  # ou o caminho do seu projeto
+```
+
+3. Pare e remova o processo antigo:
+```bash
+pm2 delete barbearia
+pm2 start ecosystem.config.js
+```
+
+**Problema: Erro de conexão com banco de dados (P1001)**
+
+1. Verifique se o `DATABASE_URL` está correto no `.env`:
+```bash
+cat .env | grep DATABASE_URL
+```
+
+2. Para banco Neon, verifique:
+   - Se o IP do servidor está na lista de IPs permitidos no Neon
+   - Se a URL está usando `?sslmode=require` no final
+   - Se a senha está correta
+
+3. Teste a conexão manualmente:
+```bash
+# Instalar psql se necessário
+apt-get install postgresql-client
+
+# Testar conexão (substitua pela sua URL)
+psql "postgresql://usuario:senha@host:porta/database?sslmode=require"
+```
+
+4. Se usar pooler do Neon, certifique-se de usar a URL com `-pooler`:
+```bash
+# Exemplo de URL correta para Neon com pooler
+DATABASE_URL="postgresql://usuario:senha@ep-xxx-pooler.us-east-1.aws.neon.tech:5432/database?sslmode=require"
 ```
 
 ## 🌐 Passo 6: Configurar Nginx
@@ -289,22 +364,180 @@ pm2 restart barbearia
 
 ## ✅ Passo 9: Verificar Funcionamento
 
-### 9.1 Verificar logs
+### 9.1 Diagnóstico Completo - Verificar se o Sistema Está Rodando
+
+**Se você está recebendo erro 502 Bad Gateway, siga este checklist:**
+
+#### 1. Verificar se o PM2 está rodando
 ```bash
-pm2 logs barbearia
-tail -f /var/log/nginx/error.log
+pm2 status
+```
+**Esperado**: Deve mostrar `barbearia` com status `online` e uso de memória/CPU.
+
+**Se estiver offline ou erro**:
+```bash
+pm2 logs barbearia --err --lines 50
+pm2 restart barbearia
 ```
 
-### 9.2 Testar webhook do Stripe
+#### 2. Verificar se a aplicação está escutando na porta 3000
+```bash
+netstat -tulpn | grep 3000
+# ou
+ss -tulpn | grep 3000
+```
+**Esperado**: Deve mostrar algo como `0.0.0.0:3000` ou `127.0.0.1:3000`.
+
+**Se não aparecer nada**: A aplicação não está rodando. Verifique os logs:
+```bash
+pm2 logs barbearia --err --lines 100
+```
+
+#### 3. Testar conexão local na porta 3000
+```bash
+curl http://localhost:3000
+# ou
+curl http://127.0.0.1:3000
+```
+**Esperado**: Deve retornar HTML da página inicial (não erro de conexão).
+
+**Se der erro de conexão**: A aplicação não está respondendo. Verifique:
+```bash
+# Ver logs de erro
+pm2 logs barbearia --err --lines 100
+
+# Verificar se há erros de build
+cd /var/www/barber
+npm run build
+```
+
+#### 4. Verificar configuração do Nginx
+```bash
+# Testar configuração
+nginx -t
+
+# Verificar se o arquivo de configuração está correto
+cat /etc/nginx/sites-available/barbearia | grep -A 5 "proxy_pass"
+```
+**Esperado**: Deve mostrar `proxy_pass http://127.0.0.1:3000;` ou `proxy_pass http://localhost:3000;`
+
+#### 5. Verificar logs do Nginx
+```bash
+# Ver erros recentes
+tail -50 /var/log/nginx/error.log
+
+# Ver erros em tempo real
+tail -f /var/log/nginx/error.log
+```
+**Procurar por**: Erros como "Connection refused", "upstream", "connect() failed"
+
+#### 6. Verificar se o Nginx está rodando
+```bash
+systemctl status nginx
+```
+**Esperado**: Status `active (running)`
+
+#### 7. Verificar firewall
+```bash
+# Verificar se a porta 3000 está acessível localmente
+ufw status
+```
+**Nota**: A porta 3000 não precisa estar aberta no firewall externo, apenas acessível localmente.
+
+#### 8. Verificar variáveis de ambiente
+```bash
+cd /var/www/barber
+cat .env | grep -E "(DATABASE_URL|NEXTAUTH_URL|NODE_ENV)"
+```
+**Verificar**: 
+- `DATABASE_URL` está correto e acessível
+- `NEXTAUTH_URL` está com o domínio correto
+- `NODE_ENV=production`
+
+### 9.2 Soluções Comuns para 502 Bad Gateway
+
+#### Problema: PM2 não está rodando
+```bash
+cd /var/www/barber
+pm2 start ecosystem.config.js
+pm2 save
+```
+
+#### Problema: Aplicação não inicia (erro no build)
+```bash
+cd /var/www/barber
+npm run build
+# Se der erro, corrigir e tentar novamente
+pm2 restart barbearia
+```
+
+#### Problema: Erro de conexão com banco de dados
+```bash
+# Verificar DATABASE_URL
+cat .env | grep DATABASE_URL
+
+# Testar conexão
+npx prisma db pull  # ou outro comando que teste a conexão
+```
+
+#### Problema: Nginx não consegue conectar ao backend
+```bash
+# Verificar se a porta 3000 está acessível
+curl http://127.0.0.1:3000
+
+# Se não funcionar, verificar se o Next.js está configurado corretamente
+cd /var/www/barber
+pm2 logs barbearia --lines 50
+```
+
+#### Problema: Porta 3000 já está em uso
+```bash
+# Verificar o que está usando a porta 3000
+lsof -i :3000
+# ou
+netstat -tulpn | grep 3000
+
+# Se for outro processo, parar ou mudar a porta no ecosystem.config.js
+```
+
+### 9.3 Testar webhook do Stripe
 1. No Dashboard do Stripe, vá em **Webhooks**
 2. Clique no webhook criado
 3. Clique em **"Send test webhook"**
 4. Verifique os logs: `pm2 logs barbearia`
 
-### 9.3 Testar aplicação
+### 9.4 Testar aplicação
 - Acesse: `https://seu-dominio.com.br`
 - Teste fazer um agendamento
 - Verifique se o webhook está funcionando
+
+### 9.5 Script de Diagnóstico Rápido
+
+Crie um arquivo `check-status.sh` no servidor:
+
+```bash
+#!/bin/bash
+echo "=== Status do PM2 ==="
+pm2 status
+echo ""
+echo "=== Porta 3000 ==="
+netstat -tulpn | grep 3000 || echo "Porta 3000 não está em uso!"
+echo ""
+echo "=== Teste Local ==="
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000 && echo " - OK" || echo " - ERRO"
+echo ""
+echo "=== Status do Nginx ==="
+systemctl status nginx --no-pager | head -5
+echo ""
+echo "=== Últimos erros do PM2 ==="
+pm2 logs barbearia --err --lines 10 --nostream
+```
+
+Execute:
+```bash
+chmod +x check-status.sh
+./check-status.sh
+```
 
 ## 🔄 Passo 10: Script de Deploy Automatizado
 
@@ -321,9 +554,48 @@ chmod +x deploy.sh
 ```bash
 pm2 status              # Ver status
 pm2 logs barbearia      # Ver logs
+pm2 logs barbearia --err --lines 100  # Ver apenas erros (últimas 100 linhas)
+pm2 logs barbearia --out --lines 100 # Ver apenas saída
 pm2 restart barbearia   # Reiniciar
 pm2 stop barbearia      # Parar
 pm2 delete barbearia    # Remover
+```
+
+### Diagnosticar Erro "Application error"
+Se você está vendo "Application error: a server-side exception has occurred":
+
+1. **Ver logs de erro do PM2:**
+```bash
+pm2 logs barbearia --err --lines 100
+```
+
+2. **Ver todos os logs recentes:**
+```bash
+pm2 logs barbearia --lines 100
+```
+
+3. **Verificar erros específicos comuns:**
+```bash
+# Erro de banco de dados
+pm2 logs barbearia | grep -i "database\|prisma\|connection"
+
+# Erro de variáveis de ambiente
+pm2 logs barbearia | grep -i "env\|undefined\|missing"
+
+# Erro de autenticação
+pm2 logs barbearia | grep -i "auth\|nextauth\|secret"
+```
+
+4. **Verificar se o build está completo:**
+```bash
+ls -la .next/
+ls -la .next/server/
+```
+
+5. **Testar conexão com banco:**
+```bash
+cd /var/www/barber
+npx prisma db pull
 ```
 
 ### Nginx
