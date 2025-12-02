@@ -231,28 +231,52 @@ export async function POST(request: NextRequest) {
           )
         }
         
-        console.log("💾 Criando subscription no banco de dados:")
-        console.log("   - clientId:", client.id)
-        console.log("   - serviceId:", serviceId)
-        console.log("   - stripeSubscriptionId:", subscriptionId)
-        console.log("   - status:", subscriptionData.status)
-        console.log("   - currentPeriodStart:", currentPeriodStart)
-        console.log("   - currentPeriodEnd:", currentPeriodEnd)
-        
-        await db.subscription.create({
-          data: {
-            clientId: client.id,
-            serviceId: serviceId,
-            stripeSubscriptionId: subscriptionId,
-            status: subscriptionData.status,
-            currentPeriodStart: currentPeriodStart,
-            currentPeriodEnd: currentPeriodEnd,
-            cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
-            paymentId: payment.id,
-          },
+        // Verificar se subscription já existe (pode ter sido criada pela página /success)
+        const existingSubscription = await db.subscription.findUnique({
+          where: { stripeSubscriptionId: subscriptionId },
         })
         
-        console.log("✅ Subscription criada com sucesso!")
+        if (existingSubscription) {
+          console.log("ℹ️ Subscription já existe no banco, atualizando com dados do webhook:")
+          console.log("   - Subscription ID:", existingSubscription.id)
+          console.log("   - Atualizando datas para:", currentPeriodStart, "até", currentPeriodEnd)
+          
+          // Atualizar subscription com as datas corretas do webhook
+          await db.subscription.update({
+            where: { id: existingSubscription.id },
+            data: {
+              status: subscriptionData.status,
+              currentPeriodStart: currentPeriodStart,
+              currentPeriodEnd: currentPeriodEnd,
+              cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
+            },
+          })
+          
+          console.log("✅ Subscription atualizada com sucesso pelo webhook!")
+        } else {
+          console.log("💾 Criando subscription no banco de dados (webhook):")
+          console.log("   - clientId:", client.id)
+          console.log("   - serviceId:", serviceId)
+          console.log("   - stripeSubscriptionId:", subscriptionId)
+          console.log("   - status:", subscriptionData.status)
+          console.log("   - currentPeriodStart:", currentPeriodStart)
+          console.log("   - currentPeriodEnd:", currentPeriodEnd)
+          
+          await db.subscription.create({
+            data: {
+              clientId: client.id,
+              serviceId: serviceId,
+              stripeSubscriptionId: subscriptionId,
+              status: subscriptionData.status,
+              currentPeriodStart: currentPeriodStart,
+              currentPeriodEnd: currentPeriodEnd,
+              cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
+              paymentId: payment.id,
+            },
+          })
+          
+          console.log("✅ Subscription criada com sucesso pelo webhook!")
+        }
         
         // Revalidar páginas para atualizar em tempo real
         revalidatePath("/")

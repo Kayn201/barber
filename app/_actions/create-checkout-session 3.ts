@@ -37,67 +37,51 @@ export const createCheckoutSession = async (
       throw new Error("Serviço ou profissional não encontrado")
     }
 
-    // ✅ VALIDAÇÃO CRÍTICA: Verificar se é assinatura e se já tem assinatura ativa
-    // Esta validação DEVE acontecer ANTES de criar qualquer checkout session
+    // Verificar se é assinatura - se for, exigir autenticação e verificar se já tem assinatura ativa
+    // Nota: A verificação de autenticação já é feita no frontend (booking-review-card)
+    // Esta verificação é uma camada extra de segurança
     if (service.isSubscription && service.subscriptionInterval) {
-      const session = await getServerSession(authOptions)
-      if (!session?.user) {
-        console.error("❌ BLOQUEADO: Usuário não autenticado para assinatura")
-        throw new Error("Autenticação necessária para assinaturas")
-      }
-      
-      const userEmail = (session.user as any).email
-      console.log("🔍 VALIDAÇÃO: Verificando se usuário já tem assinatura ativa")
-      console.log("   - Email:", userEmail)
-      console.log("   - ServiceId:", params.serviceId)
-      
-      // Buscar TODAS as assinaturas do cliente para este serviço
-      // Uma assinatura é válida se: status === "active" E currentPeriodEnd >= now
-      // Mesmo que cancelAtPeriodEnd === true, ainda é válida até o final do período
-      const client = await db.client.findFirst({
-        where: { email: userEmail },
-        include: {
-          subscriptions: {
-            where: {
-              serviceId: params.serviceId,
-              status: "active",
-              currentPeriodEnd: {
-                gte: new Date(), // Ainda não expirou - isso é o que importa
+      try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user) {
+          console.error("Erro: Usuário não autenticado para assinatura")
+          throw new Error("Autenticação necessária para assinaturas")
+        }
+        console.log("Usuário autenticado para assinatura:", session.user.email)
+        
+        // Verificar se o usuário já tem assinatura ativa para este serviço
+        // Uma assinatura é válida se: status === "active" E currentPeriodEnd >= now
+        // Mesmo que cancelAtPeriodEnd === true, ainda é válida até o final do período
+        const userEmail = (session.user as any).email
+        const client = await db.client.findFirst({
+          where: { email: userEmail },
+          include: {
+            subscriptions: {
+              where: {
+                serviceId: params.serviceId,
+                status: "active",
+                currentPeriodEnd: {
+                  gte: new Date(), // Ainda não expirou - isso é o que importa
+                },
+                // Removido cancelAtPeriodEnd: false - mesmo marcada para cancelar, ainda é válida até o final do período
               },
-              // Removido cancelAtPeriodEnd: false - mesmo marcada para cancelar, ainda é válida até o final do período
             },
           },
-        },
-      })
-      
-      console.log("📋 Resultado da validação:")
-      console.log("   - Cliente encontrado:", !!client)
-      console.log("   - Total de assinaturas encontradas:", client?.subscriptions.length || 0)
-      
-      if (client?.subscriptions.length > 0) {
-        client.subscriptions.forEach((sub, index) => {
-          console.log(`   - Assinatura ${index + 1}:`)
-          console.log("     * ID:", sub.id)
-          console.log("     * Status:", sub.status)
-          console.log("     * currentPeriodEnd:", sub.currentPeriodEnd)
-          console.log("     * cancelAtPeriodEnd:", sub.cancelAtPeriodEnd)
-          console.log("     * Válida até:", sub.currentPeriodEnd > new Date() ? "SIM" : "NÃO")
         })
         
-        // Verificar se alguma assinatura está realmente ativa e válida
-        const activeSubscription = client.subscriptions.find(
-          (sub) => sub.status === "active" && sub.currentPeriodEnd >= new Date()
-        )
-        
-        if (activeSubscription) {
-          console.error("❌ BLOQUEADO: Usuário já possui assinatura ativa e válida para este serviço!")
-          console.error("   - Subscription ID:", activeSubscription.id)
-          console.error("   - Válida até:", activeSubscription.currentPeriodEnd)
-          throw new Error("Você já possui uma assinatura ativa para este serviço. Não é possível criar uma nova assinatura enquanto a atual estiver válida.")
+        // Se já tem assinatura ativa, retornar null para indicar que não precisa pagar
+        if (client && client.subscriptions.length > 0) {
+          console.log("Usuário já tem assinatura ativa para este serviço, não precisa pagar novamente")
+          return null
         }
+      } catch (authError: any) {
+        console.error("Erro ao verificar autenticação:", authError)
+        // Se o erro for sobre assinatura ativa, não relançar
+        if (authError.message && authError.message.includes("assinatura ativa")) {
+          return null
+        }
+        throw new Error("Autenticação necessária para assinaturas")
       }
-      
-      console.log("✅ Validação passou: Nenhuma assinatura ativa encontrada, pode prosseguir com checkout")
     }
 
     // Métodos de pagamento disponíveis
