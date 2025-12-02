@@ -18,15 +18,20 @@ export default function SuccessRedirect({ clientId }: SuccessRedirectProps) {
     // Processar redirect no cliente após um pequeno delay
     // Isso garante que a página renderize antes de redirecionar
     const timer = setTimeout(() => {
+      // Usar window.location.origin para garantir URL correta (não localhost)
+      const baseUrl = window.location.origin
+      
       if (clientId) {
-        router.push(`/?clientId=${clientId}`)
+        // Usar window.location.href para garantir redirecionamento correto
+        window.location.href = `${baseUrl}/?clientId=${clientId}`
       } else {
-        router.push("/")
+        // Usar window.location.href para garantir redirecionamento correto
+        window.location.href = `${baseUrl}/`
       }
     }, 1500) // 1.5 segundos para mostrar a mensagem de sucesso
 
     return () => clearTimeout(timer)
-  }, [router, clientId])
+  }, [clientId])
 
   return null
 }

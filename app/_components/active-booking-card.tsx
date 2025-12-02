@@ -367,36 +367,44 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
 
         {barbershop && (
           <div
-            onClick={() => {
-              const address = barbershop.address
-              if (!address) return
+            onClick={async () => {
+              if (!barbershop.address) return
 
-              // Tentar abrir Waze primeiro (deep link)
-              const wazeUrl = `waze://?q=${encodeURIComponent(address)}`
-              const googleMapsUrl = `https://maps.google.com/?q=${encodeURIComponent(address)}`
+              const encodedAddress = encodeURIComponent(barbershop.address)
               
-              // Detectar se o Waze foi aberto (a página perde o foco)
-              let wazeOpened = false
-              const handleBlur = () => {
-                wazeOpened = true
-                window.removeEventListener('blur', handleBlur)
-              }
-              window.addEventListener('blur', handleBlur)
-              
-              // Tentar abrir Waze via iframe (mais confiável em mobile)
-              const iframe = document.createElement('iframe')
-              iframe.style.display = 'none'
-              iframe.src = wazeUrl
-              document.body.appendChild(iframe)
-              
-              // Se Waze não abrir em 1 segundo, abrir Google Maps
-              setTimeout(() => {
-                if (!wazeOpened) {
-                  window.open(googleMapsUrl, '_blank', 'noopener,noreferrer')
+              // Tentar usar a API Share nativa (iOS/Android modernos)
+              // Isso mostra o menu nativo do sistema com apps disponíveis
+              if (navigator.share) {
+                try {
+                  await navigator.share({
+                    title: barbershop.name,
+                    text: barbershop.address,
+                    url: `https://maps.google.com/?q=${encodedAddress}`,
+                  })
+                  return
+                } catch (error) {
+                  // Se o usuário cancelar, não fazer nada
+                  if ((error as Error).name === "AbortError") {
+                    return
+                  }
+                  // Se der outro erro, continuar com método alternativo
                 }
-                document.body.removeChild(iframe)
-                window.removeEventListener('blur', handleBlur)
-              }, 1000)
+              }
+
+              // Método alternativo: usar URLs que o sistema reconhece
+              const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+              const isAndroid = /Android/i.test(navigator.userAgent)
+
+              if (isIOS) {
+                // iOS: usar maps.apple.com - o sistema mostra menu nativo automaticamente
+                window.location.href = `http://maps.apple.com/?q=${encodedAddress}`
+              } else if (isAndroid) {
+                // Android: usar intent geo: - mostra menu de apps disponíveis
+                window.location.href = `geo:0,0?q=${encodedAddress}`
+              } else {
+                // Desktop: abrir Google Maps
+                window.open(`https://maps.google.com/?q=${encodedAddress}`, "_blank", "noopener,noreferrer")
+              }
             }}
             className="relative mt-4 md:mt-6 flex h-[120px] md:h-[180px] w-full items-end cursor-pointer group"
           >
