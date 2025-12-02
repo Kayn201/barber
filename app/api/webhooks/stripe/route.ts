@@ -183,6 +183,38 @@ export async function POST(request: NextRequest) {
       const subscriptionResponse = await stripe.subscriptions.retrieve(subscriptionId)
       const subscriptionData = subscriptionResponse as any
 
+      console.log("📋 Dados da subscription do Stripe:")
+      console.log("   - current_period_start:", subscriptionData.current_period_start)
+      console.log("   - current_period_end:", subscriptionData.current_period_end)
+      console.log("   - status:", subscriptionData.status)
+      console.log("   - cancel_at_period_end:", subscriptionData.cancel_at_period_end)
+
+      // Validar que as datas existem e são válidas
+      if (!subscriptionData.current_period_start || !subscriptionData.current_period_end) {
+        console.error("❌ Datas da subscription não encontradas no Stripe")
+        console.error("   - current_period_start:", subscriptionData.current_period_start)
+        console.error("   - current_period_end:", subscriptionData.current_period_end)
+        return NextResponse.json(
+          { error: "Dados da subscription incompletos" },
+          { status: 400 }
+        )
+      }
+
+      // Converter timestamps Unix para Date
+      const currentPeriodStart = new Date(subscriptionData.current_period_start * 1000)
+      const currentPeriodEnd = new Date(subscriptionData.current_period_end * 1000)
+
+      // Validar que as datas são válidas
+      if (isNaN(currentPeriodStart.getTime()) || isNaN(currentPeriodEnd.getTime())) {
+        console.error("❌ Datas inválidas após conversão:")
+        console.error("   - currentPeriodStart:", currentPeriodStart)
+        console.error("   - currentPeriodEnd:", currentPeriodEnd)
+        return NextResponse.json(
+          { error: "Datas da subscription inválidas" },
+          { status: 400 }
+        )
+      }
+
       // O metadata da subscription está em subscriptionData.metadata, não em session.metadata
       const subscriptionMetadata = subscriptionData.metadata || metadata
 
@@ -199,18 +231,28 @@ export async function POST(request: NextRequest) {
           )
         }
         
+        console.log("💾 Criando subscription no banco de dados:")
+        console.log("   - clientId:", client.id)
+        console.log("   - serviceId:", serviceId)
+        console.log("   - stripeSubscriptionId:", subscriptionId)
+        console.log("   - status:", subscriptionData.status)
+        console.log("   - currentPeriodStart:", currentPeriodStart)
+        console.log("   - currentPeriodEnd:", currentPeriodEnd)
+        
         await db.subscription.create({
           data: {
             clientId: client.id,
             serviceId: serviceId,
             stripeSubscriptionId: subscriptionId,
             status: subscriptionData.status,
-            currentPeriodStart: new Date(subscriptionData.current_period_start * 1000),
-            currentPeriodEnd: new Date(subscriptionData.current_period_end * 1000),
-            cancelAtPeriodEnd: subscriptionData.cancel_at_period_end,
+            currentPeriodStart: currentPeriodStart,
+            currentPeriodEnd: currentPeriodEnd,
+            cancelAtPeriodEnd: subscriptionData.cancel_at_period_end || false,
             paymentId: payment.id,
           },
         })
+        
+        console.log("✅ Subscription criada com sucesso!")
         
         // Revalidar páginas para atualizar em tempo real
         revalidatePath("/")
@@ -363,14 +405,28 @@ export async function POST(request: NextRequest) {
   }
 
   // Handle customer.subscription.updated - Atualizações de assinatura
+  // Este evento é disparado quando há qualquer mudança na assinatura:
+  // - Status mudou (active -> past_due, canceled, etc)
+  // - Período renovado
+  // - Cancelamento agendado
+  // - Reativação após falha de pagamento
   if (event.type === "customer.subscription.updated") {
+    console.log("=".repeat(50))
+    console.log("🔄 Webhook recebido: customer.subscription.updated")
+    console.log("=".repeat(50))
     const subscription = event.data.object as any
 
     const dbSubscription = await db.subscription.findUnique({
       where: { stripeSubscriptionId: subscription.id },
+      include: {
+        client: true,
+      },
     })
 
     if (dbSubscription) {
+      const previousStatus = dbSubscription.status
+      const newStatus = subscription.status
+      
       await db.subscription.update({
         where: { id: dbSubscription.id },
         data: {
@@ -381,10 +437,95 @@ export async function POST(request: NextRequest) {
         },
       })
       
+      console.log("✅ Subscription atualizada:")
+      console.log("   - ID:", dbSubscription.id)
+      console.log("   - Status anterior:", previousStatus)
+      console.log("   - Status novo:", newStatus)
+      console.log("   - Cliente:", dbSubscription.client.email)
+      
+      // Se a assinatura foi cancelada ou ficou unpaid, cancelar bookings futuros
+      if ((newStatus === "canceled" || newStatus === "unpaid") && previousStatus === "active") {
+        const now = new Date()
+        const canceledBookings = await db.booking.updateMany({
+          where: {
+            clientId: dbSubscription.clientId,
+            serviceId: dbSubscription.serviceId,
+            status: "confirmed",
+            date: {
+              gt: now, // Apenas bookings futuros
+            },
+          },
+          data: {
+            status: "cancelled",
+          },
+        })
+        
+        console.log(`✅ ${canceledBookings.count} booking(s) futuro(s) cancelado(s) devido a cancelamento da assinatura`)
+      }
+      
+      // Se a assinatura foi reativada (de past_due/unpaid para active), não fazer nada
+      // Os bookings futuros já foram criados ou serão criados no próximo invoice.payment_succeeded
+      
       // Revalidar páginas para atualizar em tempo real
       revalidatePath("/")
       revalidatePath("/admin")
       revalidatePath("/bookings")
+      revalidatePath("/subscriptions")
+    }
+  }
+  
+  // Handle customer.subscription.deleted - Assinatura cancelada permanentemente
+  // Este evento é disparado quando a assinatura é cancelada definitivamente
+  // (após múltiplas tentativas de pagamento falhadas ou cancelamento manual)
+  if (event.type === "customer.subscription.deleted") {
+    console.log("=".repeat(50))
+    console.log("🗑️ Webhook recebido: customer.subscription.deleted")
+    console.log("=".repeat(50))
+    const subscription = event.data.object as any
+
+    const dbSubscription = await db.subscription.findUnique({
+      where: { stripeSubscriptionId: subscription.id },
+      include: {
+        client: true,
+      },
+    })
+
+    if (dbSubscription) {
+      // Atualizar status para canceled
+      await db.subscription.update({
+        where: { id: dbSubscription.id },
+        data: {
+          status: "canceled",
+          cancelAtPeriodEnd: false,
+        },
+      })
+      
+      console.log("✅ Subscription marcada como cancelada:", dbSubscription.id)
+      console.log("   - Cliente:", dbSubscription.client.email)
+      
+      // Cancelar todos os bookings futuros desta assinatura
+      const now = new Date()
+      const canceledBookings = await db.booking.updateMany({
+        where: {
+          clientId: dbSubscription.clientId,
+          serviceId: dbSubscription.serviceId,
+          status: "confirmed",
+          date: {
+            gt: now, // Apenas bookings futuros
+          },
+        },
+        data: {
+          status: "cancelled",
+        },
+      })
+      
+      console.log(`✅ ${canceledBookings.count} booking(s) futuro(s) cancelado(s)`)
+      
+      // Revalidar páginas
+      revalidatePath("/")
+      revalidatePath("/admin")
+      revalidatePath("/bookings")
+      revalidatePath("/subscriptions")
     }
   }
 
@@ -456,6 +597,8 @@ export async function POST(request: NextRequest) {
   }
 
   // Handle invoice.payment_failed - Falha no pagamento de assinatura
+  // Este evento é disparado quando o Stripe tenta cobrar uma assinatura e falha
+  // (ex: cartão bloqueado, saldo insuficiente, etc)
   if (event.type === "invoice.payment_failed") {
     console.log("=".repeat(50))
     console.log("❌ Webhook recebido: invoice.payment_failed")
@@ -468,31 +611,71 @@ export async function POST(request: NextRequest) {
           ? invoice.subscription
           : invoice.subscription.id
 
+      // Buscar assinatura no Stripe para ver o status atual
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+      
       const dbSubscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },
+        include: {
+          client: true,
+        },
       })
 
       if (dbSubscription) {
-        // Atualizar status da subscription
+        // Atualizar status da subscription baseado no status do Stripe
+        // O Stripe pode mudar o status para: past_due, unpaid, ou canceled
         await db.subscription.update({
           where: { id: dbSubscription.id },
           data: {
-            status: "past_due",
+            status: stripeSubscription.status,
+            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
           },
         })
         
-        console.log("✅ Subscription atualizada para past_due:", dbSubscription.id)
+        console.log("✅ Subscription atualizada para:", stripeSubscription.status)
+        console.log("   - ID:", dbSubscription.id)
+        console.log("   - Cliente:", dbSubscription.client.email)
+        
+        // Se a assinatura foi cancelada por falha de pagamento, cancelar bookings futuros
+        if (stripeSubscription.status === "canceled" || stripeSubscription.status === "unpaid") {
+          const now = new Date()
+          await db.booking.updateMany({
+            where: {
+              clientId: dbSubscription.clientId,
+              serviceId: dbSubscription.serviceId,
+              status: "confirmed",
+              date: {
+                gt: now, // Apenas bookings futuros
+              },
+            },
+            data: {
+              status: "cancelled",
+            },
+          })
+          
+          console.log("✅ Bookings futuros cancelados devido a falha no pagamento da assinatura")
+        }
         
         // Revalidar páginas
         revalidatePath("/")
         revalidatePath("/admin")
         revalidatePath("/bookings")
+        revalidatePath("/subscriptions")
       }
     }
   }
 
   // Handle invoice.payment_succeeded - Pagamentos recorrentes de assinatura
+  // Este evento é disparado quando:
+  // 1. Primeira cobrança da assinatura (já tratado em checkout.session.completed)
+  // 2. Renovação mensal bem-sucedida
+  // 3. Pagamento bem-sucedido após falha (reativação)
   if (event.type === "invoice.payment_succeeded") {
+    console.log("=".repeat(50))
+    console.log("✅ Webhook recebido: invoice.payment_succeeded")
+    console.log("=".repeat(50))
     const invoice = event.data.object as any
 
     if (invoice.subscription) {
@@ -501,49 +684,74 @@ export async function POST(request: NextRequest) {
           ? invoice.subscription
           : invoice.subscription.id
 
+      // Buscar assinatura no Stripe para verificar status atual
+      const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId)
+
       const dbSubscription = await db.subscription.findUnique({
         where: { stripeSubscriptionId: subscriptionId },
-        include: { service: true },
+        include: { 
+          service: true,
+          client: true,
+        },
       })
 
-      if (dbSubscription && invoice.metadata?.professionalId && invoice.metadata?.date) {
-        // Buscar userId pelo email do cliente
-        const client = await db.client.findUnique({
-          where: { id: dbSubscription.clientId },
-          select: { email: true },
+      if (dbSubscription) {
+        // Atualizar status da assinatura (pode ter sido reativada após falha)
+        await db.subscription.update({
+          where: { id: dbSubscription.id },
+          data: {
+            status: stripeSubscription.status, // Pode ser "active" se foi reativada
+            currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          },
         })
-        const userId = client?.email ? await getUserIdByEmail(client.email) : null
         
-        const bookingDate = new Date(invoice.metadata.date)
-        const slotAvailable = await isSlotAvailable({
-          professionalId: invoice.metadata.professionalId,
-          startDate: bookingDate,
-          serviceDuration: dbSubscription.service.duration,
-        })
-
-        if (!slotAvailable) {
-          console.error("❌ Slot ocupado para invoice.subscription.booking:", {
-            professionalId: invoice.metadata.professionalId,
-            date: bookingDate.toISOString(),
-            serviceId: dbSubscription.serviceId,
-          })
-        } else {
-          await db.booking.create({
-            data: {
-              userId: userId || undefined,
-              clientId: dbSubscription.clientId,
-              serviceId: dbSubscription.serviceId,
-              professionalId: invoice.metadata.professionalId,
-              date: bookingDate,
-              status: "confirmed",
-            },
-          })
+        console.log("✅ Subscription atualizada:")
+        console.log("   - ID:", dbSubscription.id)
+        console.log("   - Status:", stripeSubscription.status)
+        console.log("   - Cliente:", dbSubscription.client.email)
+        
+        // Se tiver metadata com professionalId e date, criar booking
+        // (isso acontece em renovações mensais quando o cliente agendou um horário)
+        if (invoice.metadata?.professionalId && invoice.metadata?.date) {
+          // Buscar userId pelo email do cliente
+          const userId = await getUserIdByEmail(dbSubscription.client.email)
           
-          // Revalidar páginas para atualizar em tempo real
-          revalidatePath("/")
-          revalidatePath("/admin")
-          revalidatePath("/bookings")
+          const bookingDate = new Date(invoice.metadata.date)
+          const slotAvailable = await isSlotAvailable({
+            professionalId: invoice.metadata.professionalId,
+            startDate: bookingDate,
+            serviceDuration: dbSubscription.service.duration,
+          })
+
+          if (!slotAvailable) {
+            console.error("❌ Slot ocupado para invoice.subscription.booking:", {
+              professionalId: invoice.metadata.professionalId,
+              date: bookingDate.toISOString(),
+              serviceId: dbSubscription.serviceId,
+            })
+          } else {
+            await db.booking.create({
+              data: {
+                userId: userId || undefined,
+                clientId: dbSubscription.clientId,
+                serviceId: dbSubscription.serviceId,
+                professionalId: invoice.metadata.professionalId,
+                date: bookingDate,
+                status: "confirmed",
+              },
+            })
+            
+            console.log("✅ Booking criado para renovação de assinatura")
+          }
         }
+        
+        // Revalidar páginas para atualizar em tempo real
+        revalidatePath("/")
+        revalidatePath("/admin")
+        revalidatePath("/bookings")
+        revalidatePath("/subscriptions")
       }
     }
   }

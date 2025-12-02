@@ -1,7 +1,7 @@
 "use client"
 
 import { Button } from "./ui/button"
-import { CalendarIcon, HomeIcon, LogOut, LogIn } from "lucide-react"
+import { CalendarIcon, HomeIcon, LogOut, LogIn, CreditCard } from "lucide-react"
 import { SheetClose, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet"
 import Link from "next/link"
 import { useEffect, useState } from "react"
@@ -83,6 +83,14 @@ const SidebarSheet = () => {
             Agendamentos
           </Link>
         </Button>
+        {session?.user && (
+          <Button className="justify-start gap-2" variant="ghost" asChild>
+            <Link href="/subscriptions">
+              <CreditCard size={18} />
+              Assinaturas
+            </Link>
+          </Button>
+        )}
       </div>
 
       <div className="flex flex-col gap-2 border-b border-solid py-5">

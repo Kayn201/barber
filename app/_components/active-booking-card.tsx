@@ -159,12 +159,16 @@ const ActiveBookingCard = ({ booking, barbershop }: ActiveBookingCardProps) => {
   // 1. Não pode reembolsar se o booking foi reagendado (tem originalBookingId)
   // 2. Não pode reembolsar se o status é "cancelled" E foi reagendado (verificar se há booking com originalBookingId apontando para este)
   // 3. Deve estar dentro do tempo de cancelamento configurado pelo ADM (se configurado)
+  // 4. Não pode reembolsar se for um serviço de assinatura (isSubscription = true)
   const canRefund = useMemo(() => {
     if (!isConfirmed || booking.isRefunded) return false
     
     // Se o booking foi reagendado (tem originalBookingId), não permitir reembolso pelo cliente
     // Isso identifica o booking novo (reagendado)
     if ((booking as any).originalBookingId) return false
+    
+    // Não pode reembolsar se for um serviço de assinatura
+    if (booking.service.isSubscription) return false
     
     // Verificar se tem payment - se não tem, não pode reembolsar (pode ser booking de assinatura)
     if (!booking.payment?.stripeId) return false

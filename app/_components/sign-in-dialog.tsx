@@ -5,7 +5,21 @@ import Image from "next/image"
 import { Josefin_Sans } from "next/font/google"
 
 const SignInDialog = () => {
-  const handleLoginWithGoogleClick = () => signIn("google")
+  const handleLoginWithGoogleClick = () => {
+    // Sempre usar localhost em desenvolvimento, mesmo que window.location seja diferente
+    const isDevelopment = process.env.NODE_ENV === "development" || 
+                         window.location.hostname === "localhost" ||
+                         window.location.hostname === "127.0.0.1"
+    
+    const callbackUrl = isDevelopment 
+      ? "http://localhost:3000" 
+      : window.location.origin
+    
+    signIn("google", { 
+      callbackUrl,
+      redirect: true,
+    })
+  }
   return (
     <>
       <DialogHeader>

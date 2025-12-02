@@ -37,7 +37,7 @@ export const createCheckoutSession = async (
       throw new Error("Serviço ou profissional não encontrado")
     }
 
-    // Verificar se é assinatura - se for, exigir autenticação
+    // Verificar se é assinatura - se for, exigir autenticação e verificar se já tem assinatura ativa
     // Nota: A verificação de autenticação já é feita no frontend (booking-review-card)
     // Esta verificação é uma camada extra de segurança
     if (service.isSubscription && service.subscriptionInterval) {
@@ -48,8 +48,38 @@ export const createCheckoutSession = async (
           throw new Error("Autenticação necessária para assinaturas")
         }
         console.log("Usuário autenticado para assinatura:", session.user.email)
-      } catch (authError) {
+        
+        // Verificar se o usuário já tem assinatura ativa para este serviço
+        // Uma assinatura é válida se: status === "active" E currentPeriodEnd >= now
+        // Mesmo que cancelAtPeriodEnd === true, ainda é válida até o final do período
+        const userEmail = (session.user as any).email
+        const client = await db.client.findFirst({
+          where: { email: userEmail },
+          include: {
+            subscriptions: {
+              where: {
+                serviceId: params.serviceId,
+                status: "active",
+                currentPeriodEnd: {
+                  gte: new Date(), // Ainda não expirou - isso é o que importa
+                },
+                // Removido cancelAtPeriodEnd: false - mesmo marcada para cancelar, ainda é válida até o final do período
+              },
+            },
+          },
+        })
+        
+        // Se já tem assinatura ativa, retornar null para indicar que não precisa pagar
+        if (client && client.subscriptions.length > 0) {
+          console.log("Usuário já tem assinatura ativa para este serviço, não precisa pagar novamente")
+          return null
+        }
+      } catch (authError: any) {
         console.error("Erro ao verificar autenticação:", authError)
+        // Se o erro for sobre assinatura ativa, não relançar
+        if (authError.message && authError.message.includes("assinatura ativa")) {
+          return null
+        }
         throw new Error("Autenticação necessária para assinaturas")
       }
     }
