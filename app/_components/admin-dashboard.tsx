@@ -42,6 +42,7 @@ const AdminDashboard = ({
     { value: "bookings", label: "Agendamentos", icon: Calendar },
   ]
   
+  // Em mobile: mostrar 2 por vez, em desktop: mostrar todos
   const itemsPerPage = 2
   const maxIndex = Math.max(0, tabs.length - itemsPerPage)
   
@@ -53,6 +54,7 @@ const AdminDashboard = ({
     setCurrentIndex((prev) => Math.min(maxIndex, prev + 1))
   }
   
+  // Em mobile: mostrar apenas os tabs visíveis, em desktop: mostrar todos
   const visibleTabs = tabs.slice(currentIndex, currentIndex + itemsPerPage)
 
   return (
@@ -71,7 +73,8 @@ const AdminDashboard = ({
             window.dispatchEvent(new CustomEvent("bookings-tab-activated"))
           }
         }}>
-          <TabsList className="relative flex items-center gap-2 overflow-hidden !p-0 md:overflow-x-auto md:gap-3">
+          <TabsList className="relative flex items-center gap-2 overflow-hidden !p-0 md:flex-wrap md:overflow-visible md:gap-3">
+            {/* Botões de navegação - apenas em mobile */}
             <Button
               variant="outline"
               size="icon"
@@ -82,20 +85,41 @@ const AdminDashboard = ({
               <ChevronLeft className="h-4 w-4" />
             </Button>
             
-            <div className="flex-1 flex gap-2 overflow-hidden md:flex-none md:overflow-visible md:gap-3">
-              {(visibleTabs.length > 0 ? visibleTabs : tabs).map((tab) => {
-                const Icon = tab.icon
-                return (
-                  <TabsTrigger
-                    key={tab.value}
-                    value={tab.value}
-                    className="flex-1 min-w-0 basis-[calc(50%-0.25rem)] md:basis-auto md:flex-shrink-0 data-[state=active]:bg-[#EE8530] data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:scale-95 data-[state=active]:px-2.5 data-[state=active]:py-1.5"
-                  >
-                    <Icon className="mr-2 h-4 w-4 flex-shrink-0" />
-                    <span className="truncate">{tab.label}</span>
-                  </TabsTrigger>
-                )
-              })}
+            {/* Tabs - em mobile mostra apenas os visíveis, em desktop mostra todos */}
+            <div className="flex-1 flex gap-2 overflow-hidden md:flex-1 md:flex-wrap md:overflow-visible md:gap-3">
+              {/* Em mobile: mostrar apenas visibleTabs, em desktop: mostrar todos */}
+              <div className="hidden md:flex md:flex-wrap md:gap-3 md:w-full">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="md:flex-shrink-0 data-[state=active]:bg-[#EE8530] data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:scale-95 data-[state=active]:px-2.5 data-[state=active]:py-1.5"
+                    >
+                      <Icon className="mr-2 h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{tab.label}</span>
+                    </TabsTrigger>
+                  )
+                })}
+              </div>
+              
+              {/* Versão mobile: mostrar apenas visibleTabs com paginação */}
+              <div className="flex gap-2 md:hidden w-full">
+                {visibleTabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <TabsTrigger
+                      key={tab.value}
+                      value={tab.value}
+                      className="flex-1 min-w-0 basis-[calc(50%-0.25rem)] data-[state=active]:bg-[#EE8530] data-[state=active]:text-black data-[state=active]:shadow-sm data-[state=active]:scale-95 data-[state=active]:px-2.5 data-[state=active]:py-1.5"
+                    >
+                      <Icon className="mr-2 h-4 w-4 flex-shrink-0" />
+                      <span className="truncate">{tab.label}</span>
+                    </TabsTrigger>
+                  )
+                })}
+              </div>
             </div>
             
             <Button

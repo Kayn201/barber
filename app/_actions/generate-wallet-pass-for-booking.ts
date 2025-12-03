@@ -10,9 +10,28 @@ import fs from "fs"
 /**
  * Gera wallet pass automaticamente para um booking
  * Esta função é chamada após criar um booking para gerar o pass automaticamente
+ * 
+ * IMPORTANTE: Esta função tem timeout de 30 segundos e verifica se já existe wallet pass
+ * para evitar gerações duplicadas.
  */
 export async function generateWalletPassForBooking(bookingId: string) {
+  const startTime = Date.now()
+  const TIMEOUT_MS = 30000 // 30 segundos
+  
+  console.log(`🚀 [${bookingId}] Iniciando geração de wallet pass...`)
+  
   try {
+    // Verificar se já existe wallet pass ANTES de começar (evitar duplicatas)
+    const existingBooking = await db.booking.findUnique({
+      where: { id: bookingId },
+      select: { walletPassUrl: true },
+    })
+
+    if (existingBooking?.walletPassUrl) {
+      console.log(`✅ [${bookingId}] Wallet pass já existe, pulando geração:`, existingBooking.walletPassUrl)
+      return { success: true, alreadyExists: true, walletPassUrl: existingBooking.walletPassUrl }
+    }
+
     // Buscar booking com todas as relações
     const booking = await db.booking.findUnique({
       where: { id: bookingId },
@@ -24,14 +43,14 @@ export async function generateWalletPassForBooking(bookingId: string) {
     })
 
     if (!booking) {
-      console.error("❌ Booking não encontrado para gerar wallet pass:", bookingId)
+      console.error(`❌ [${bookingId}] Booking não encontrado para gerar wallet pass`)
       return { success: false, error: "Booking não encontrado" }
     }
 
-    // Se já tem walletPassUrl, não precisa gerar novamente
+    // Verificar novamente após buscar (race condition protection)
     if (booking.walletPassUrl) {
-      console.log("ℹ️ Booking já tem wallet pass:", booking.walletPassUrl)
-      return { success: true, alreadyExists: true }
+      console.log(`✅ [${bookingId}] Wallet pass foi criado durante a busca, pulando geração:`, booking.walletPassUrl)
+      return { success: true, alreadyExists: true, walletPassUrl: booking.walletPassUrl }
     }
 
     // Buscar barbershop
@@ -77,9 +96,10 @@ export async function generateWalletPassForBooking(bookingId: string) {
     
     // Verificar se há certificados no diretório
     const filesInDir = fs.readdirSync(certificatesPath)
-    console.log("   - Arquivos encontrados no diretório:", filesInDir)
+    console.log(`📁 [${bookingId}] Arquivos encontrados no diretório:`, filesInDir)
     
-    const passBuffer = await generateWalletPass(
+    // Criar Promise com timeout
+    const generatePromise = generateWalletPass(
       {
         booking: {
           id: booking.id,
@@ -95,6 +115,27 @@ export async function generateWalletPassForBooking(bookingId: string) {
       certificatesPath
     )
 
+    // Adicionar timeout de 30 segundos
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Timeout: Geração de wallet pass excedeu ${TIMEOUT_MS}ms`))
+      }, TIMEOUT_MS)
+    })
+
+    console.log(`⏱️ [${bookingId}] Gerando wallet pass (timeout: ${TIMEOUT_MS}ms)...`)
+    const passBuffer = await Promise.race([generatePromise, timeoutPromise])
+
+    // Verificar novamente se já foi criado por outra requisição (race condition)
+    const checkBooking = await db.booking.findUnique({
+      where: { id: bookingId },
+      select: { walletPassUrl: true },
+    })
+
+    if (checkBooking?.walletPassUrl) {
+      console.log(`⚠️ [${bookingId}] Wallet pass foi criado por outra requisição durante a geração, descartando resultado`)
+      return { success: true, alreadyExists: true, walletPassUrl: checkBooking.walletPassUrl }
+    }
+
     // Salvar walletPassUrl no booking
     const passUrl = `${baseUrl}/api/wallet/pass/${booking.id}`
     await db.booking.update({
@@ -102,13 +143,26 @@ export async function generateWalletPassForBooking(bookingId: string) {
       data: { walletPassUrl: passUrl },
     })
 
-    console.log("✅ Wallet pass gerado e salvo automaticamente:", passUrl)
+    const duration = Date.now() - startTime
+    console.log(`✅ [${bookingId}] Wallet pass gerado e salvo automaticamente em ${duration}ms:`, passUrl)
 
     return { success: true, walletPassUrl: passUrl }
   } catch (error: any) {
-    // Não bloquear criação do booking se falhar
-    console.error("❌ Erro ao gerar wallet pass automaticamente:", error.message)
-    return { success: false, error: error.message }
+    const duration = Date.now() - startTime
+    const errorMessage = error.message || String(error)
+    
+    console.error(`❌ [${bookingId}] Erro ao gerar wallet pass após ${duration}ms:`, errorMessage)
+    console.error(`   - Stack:`, error.stack || "N/A")
+    
+    // Marcar booking como falha na geração (opcional - pode adicionar campo walletPassError)
+    // Por enquanto, apenas logamos o erro
+    
+    return { success: false, error: errorMessage, duration }
+  } finally {
+    const duration = Date.now() - startTime
+    if (duration > 10000) {
+      console.warn(`⚠️ [${bookingId}] Geração de wallet pass demorou ${duration}ms (considerar otimização)`)
+    }
   }
 }
 

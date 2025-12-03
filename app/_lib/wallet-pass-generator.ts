@@ -319,20 +319,40 @@ export async function generateWalletPass(
   archive.directory(passDir, false)
   await archive.finalize()
 
-  // Aguardar todos os chunks
-  return new Promise((resolve, reject) => {
+  // Aguardar todos os chunks com timeout de segurança
+  return new Promise<Buffer>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      // Limpar diretório temporário em caso de timeout
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      } catch (cleanupError) {
+        console.error("Erro ao limpar diretório temporário após timeout:", cleanupError)
+      }
+      reject(new Error("Timeout ao criar arquivo ZIP do wallet pass"))
+    }, 25000) // 25 segundos (deixa 5 segundos de margem para o timeout geral de 30s)
+
     archive.on("end", () => {
+      clearTimeout(timeout)
       const buffer = Buffer.concat(chunks)
 
       // Limpar diretório temporário
-      fs.rmSync(tempDir, { recursive: true, force: true })
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      } catch (cleanupError) {
+        console.warn("Aviso: Erro ao limpar diretório temporário:", cleanupError)
+      }
 
       resolve(buffer)
     })
 
     archive.on("error", (err) => {
+      clearTimeout(timeout)
       // Limpar diretório temporário em caso de erro
-      fs.rmSync(tempDir, { recursive: true, force: true })
+      try {
+        fs.rmSync(tempDir, { recursive: true, force: true })
+      } catch (cleanupError) {
+        console.error("Erro ao limpar diretório temporário após erro:", cleanupError)
+      }
       reject(err)
     })
   })
