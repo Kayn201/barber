@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/app/_lib/prisma"
 
-const PASS_TYPE_IDENTIFIER = "pass.teste.popupsystem.com.br"
+const PASS_TYPE_IDENTIFIER = "pass.popupsystem.com.br"
 
 // GET - Listar serial numbers registrados para um device
 export async function GET(

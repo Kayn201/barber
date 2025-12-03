@@ -18,7 +18,7 @@ wallet/
 ### 1. Obter Certificados da Apple
 
 1. Acesse [Apple Developer Portal](https://developer.apple.com/account/resources/identifiers/list/passTypeId)
-2. Crie um Pass Type ID: `pass.teste.popupsystem.com.br`
+2. Crie um Pass Type ID: `pass.popupsystem.com.br`
 3. Baixe o certificado e exporte como `.p12` com senha
 4. Salve como `wallet/certificates/pass-cert.p12`
 
@@ -39,14 +39,14 @@ NEXT_PUBLIC_BASE_URL=https://seu-dominio.com
 
 ### Cloudflare (ou seu provedor DNS)
 
-1. Crie um subdomínio: `pass.teste.popupsystem.com.br`
+1. Crie um subdomínio: `pass.popupsystem.com.br`
 2. Aponte para o mesmo servidor da aplicação
 3. Configure SSL/HTTPS (obrigatório para Apple Wallet)
 
 ### Apple Developer Portal
 
 1. No Pass Type ID, configure o Web Service URL:
-   - `https://pass.teste.popupsystem.com.br/api/wallet/v1`
+   - `https://pass.popupsystem.com.br/api/wallet/v1`
 2. Configure o Website Push ID (se necessário)
 
 ## Testando

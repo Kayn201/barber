@@ -5,7 +5,7 @@ import { getBaseUrl } from "@/app/_lib/get-base-url"
 import crypto from "crypto"
 import path from "path"
 
-const PASS_TYPE_IDENTIFIER = "pass.teste.popupsystem.com.br"
+const PASS_TYPE_IDENTIFIER = "pass.popupsystem.com.br"
 
 // GET - Retornar versão atualizada do passe
 export async function GET(

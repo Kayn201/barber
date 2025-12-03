@@ -3,8 +3,9 @@ import * as archiver from "archiver"
 import * as fs from "fs"
 import * as path from "path"
 import { Readable } from "stream"
+import { getBaseUrl } from "./get-base-url"
 
-const PASS_TYPE_IDENTIFIER = "pass.teste.popupsystem.com.br"
+const PASS_TYPE_IDENTIFIER = "pass.popupsystem.com.br"
 const TEAM_IDENTIFIER = "7ZB2L2RLB2"
 
 interface BookingData {
@@ -71,12 +72,35 @@ export async function generateWalletPass(
     minute: "2-digit",
   })
 
+  // Validar e sanitizar valores para o Apple Wallet
+  // serialNumber deve ser uma string sem caracteres especiais problemáticos
+  const serialNumber = String(booking.id).replace(/[^a-zA-Z0-9\-_]/g, "")
+  
+  // authenticationToken deve ser hexadecimal (já é gerado como hex, mas garantir)
+  const validAuthToken = /^[a-fA-F0-9]+$/.test(authenticationToken) 
+    ? authenticationToken 
+    : Buffer.from(authenticationToken).toString("hex")
+  
+  // webServiceURL deve ser uma URL válida
+  let validWebServiceURL = webServiceURL
+  try {
+    new URL(webServiceURL) // Validar URL
+  } catch {
+    console.warn("⚠️ webServiceURL inválida, usando fallback")
+    validWebServiceURL = `${getBaseUrl()}/api/wallet/v1`
+  }
+  
+  console.log("📝 Validações do pass:")
+  console.log("   - serialNumber:", serialNumber)
+  console.log("   - authenticationToken (primeiros 16 chars):", validAuthToken.substring(0, 16) + "...")
+  console.log("   - webServiceURL:", validWebServiceURL)
+  
   // Preencher o pass.json com os dados do booking
   const passJson = {
     ...template,
-    serialNumber: booking.id,
-    webServiceURL,
-    authenticationToken,
+    serialNumber: serialNumber,
+    webServiceURL: validWebServiceURL,
+    authenticationToken: validAuthToken,
     eventTicket: {
       ...template.eventTicket,
       headerFields: [
